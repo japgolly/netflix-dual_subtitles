@@ -38,6 +38,8 @@
     panelVisible: false
   };
 
+  let autoFetchedSecondary = false;
+
   // Load saved preferences
   if (chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get(['nds_enabled', 'nds_furigana', 'nds_fontSize', 'nds_position', 'nds_textStyle', 'nds_secondaryTrackId'], (res) => {
@@ -47,7 +49,9 @@
       if (res.nds_position) state.position = res.nds_position;
       if (res.nds_textStyle) state.textStyle = res.nds_textStyle;
       if (res.nds_secondaryTrackId) state.secondaryTrackId = res.nds_secondaryTrackId;
+      
       updateOverlayStyles();
+      checkAndAutoFetchSecondaryTrack();
     });
   }
 
@@ -61,6 +65,36 @@
         nds_textStyle: state.textStyle,
         nds_secondaryTrackId: state.secondaryTrackId
       });
+    }
+  }
+
+  // Auto-fetch saved secondary track when player is ready
+  function checkAndAutoFetchSecondaryTrack() {
+    if (!state.secondaryTrackId || autoFetchedSecondary) return;
+    if (!state.tracks || state.tracks.length === 0) return;
+
+    // Find saved track in state.tracks
+    const match = state.tracks.find(t => 
+      t.id === state.secondaryTrackId || 
+      t.bcp47 === state.secondaryTrackId || 
+      t.language === state.secondaryTrackId ||
+      t.label.toLowerCase().includes(state.secondaryTrackId.toLowerCase())
+    );
+
+    if (match) {
+      const targetId = match.id;
+      if (state.cuesMap.has(targetId)) {
+        state.activeCues = state.cuesMap.get(targetId);
+        autoFetchedSecondary = true;
+        console.log('[Netflix Dual Subtitles] Auto-restored saved secondary cues:', targetId);
+      } else {
+        autoFetchedSecondary = true;
+        console.log('[Netflix Dual Subtitles] Auto-requesting saved secondary track on page load:', targetId);
+        window.postMessage({
+          type: 'NETFLIX_DUAL_SUB_FETCH_TRACK',
+          trackId: targetId
+        }, '*');
+      }
     }
   }
 
@@ -130,12 +164,10 @@
         return;
       }
 
-      // Check if activeCues need fallback from cuesMap
+      // Check if activeCues need fallback from cuesMap for secondaryTrackId
       if (!state.activeCues || state.activeCues.length === 0) {
         if (state.secondaryTrackId && state.cuesMap.has(state.secondaryTrackId)) {
           state.activeCues = state.cuesMap.get(state.secondaryTrackId);
-        } else if (state.cuesMap.size > 0) {
-          state.activeCues = Array.from(state.cuesMap.values())[0];
         }
       }
 
@@ -333,6 +365,7 @@
       langSelect.onchange = (e) => {
         const selectedId = e.target.value;
         state.secondaryTrackId = selectedId;
+        autoFetchedSecondary = true;
         savePreferences();
 
         if (state.cuesMap.has(selectedId)) {
@@ -464,11 +497,12 @@
       if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
       if (data.url) state.cuesMap.set(data.url, data.cues);
       
-      if (state.secondaryTrackId && (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.bcp47 || state.secondaryTrackId === data.url)) {
-        state.activeCues = data.cues;
-        console.log('[Netflix Dual Subtitles] Activated secondary cues for selected language!');
-      } else if (!state.secondaryTrackId || !state.activeCues || state.activeCues.length === 0) {
-        state.activeCues = data.cues;
+      // If a secondaryTrackId is selected, match and activate cues immediately!
+      if (state.secondaryTrackId) {
+        if (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.bcp47 || state.secondaryTrackId === data.url) {
+          state.activeCues = data.cues;
+          console.log('[Netflix Dual Subtitles] Activated secondary cues for saved preference:', state.secondaryTrackId);
+        }
       }
       populateLanguageSelect();
     }
@@ -478,6 +512,7 @@
         state.tracks = data.tracks;
         state.currentPrimaryTrackId = data.currentPrimaryTrackId;
         populateLanguageSelect();
+        checkAndAutoFetchSecondaryTrack();
       }
     }
   });
