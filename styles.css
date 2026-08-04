@@ -1,0 +1,275 @@
+/* Netflix Dual Subtitles Modern UI Design System */
+
+/* Secondary Subtitle Overlay Container */
+#netflix-dual-sub-overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 85%;
+  max-width: 1000px;
+  text-align: center;
+  z-index: 99999;
+  pointer-events: none;
+  font-family: Netflix Sans, Helvetica Neue, Segoe UI, Roboto, sans-serif;
+  user-select: none;
+  transition: bottom 0.2s ease, top 0.2s ease;
+}
+
+#netflix-dual-sub-overlay.position-top {
+  top: 10%;
+  bottom: auto;
+}
+
+#netflix-dual-sub-overlay.position-bottom {
+  bottom: 16%;
+  top: auto;
+}
+
+/* Secondary Subtitle Text Box */
+.nds-cue-box {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 6px;
+  color: #ffffff;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Font Sizes */
+.nds-size-small .nds-cue-box { font-size: 18px; }
+.nds-size-medium .nds-cue-box { font-size: 24px; }
+.nds-size-large .nds-cue-box { font-size: 30px; }
+.nds-size-xlarge .nds-cue-box { font-size: 38px; }
+
+/* Text Style Variants */
+.nds-style-bg .nds-cue-box {
+  background-color: rgba(0, 0, 0, 0.75);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.nds-style-outline .nds-cue-box {
+  background-color: transparent;
+  color: #ffd700; /* Distinct golden accent or crisp white */
+  text-shadow: 
+    -2px -2px 0 #000,
+     2px -2px 0 #000,
+    -2px  2px 0 #000,
+     2px  2px 0 #000,
+     0 3px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* Floating Player Control Trigger Button */
+.nds-trigger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 20, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 12px;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.nds-trigger-btn:hover {
+  background: rgba(229, 9, 20, 0.85);
+  border-color: #e50914;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
+}
+
+.nds-trigger-btn.active {
+  background: #e50914;
+  border-color: #e50914;
+  color: #ffffff;
+}
+
+.nds-icon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+/* Control Panel Modal / Drawer */
+#netflix-dual-sub-panel {
+  position: absolute;
+  bottom: 80px;
+  right: 40px;
+  width: 320px;
+  background: rgba(18, 18, 18, 0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+  z-index: 999999;
+  color: #fff;
+  font-family: Netflix Sans, Helvetica Neue, Segoe UI, sans-serif;
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#netflix-dual-sub-panel.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Panel Header */
+.nds-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.nds-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  color: #ffffff;
+}
+
+.nds-panel-title span {
+  color: #e50914;
+  margin-right: 6px;
+}
+
+.nds-close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.nds-close-btn:hover {
+  color: #fff;
+}
+
+/* Panel Rows & Controls */
+.nds-field-group {
+  margin-bottom: 14px;
+}
+
+.nds-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #aaa;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* Toggle Switch */
+.nds-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nds-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.nds-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.nds-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #333;
+  transition: 0.25s;
+  border-radius: 24px;
+}
+
+.nds-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.25s;
+  border-radius: 50%;
+}
+
+input:checked + .nds-slider {
+  background-color: #e50914;
+}
+
+input:checked + .nds-slider:before {
+  transform: translateX(20px);
+}
+
+/* Select Dropdown */
+.nds-select {
+  width: 100%;
+  background: #252525;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.nds-select:focus {
+  border-color: #e50914;
+}
+
+/* Button Option Groups */
+.nds-btn-group {
+  display: flex;
+  gap: 6px;
+}
+
+.nds-option-btn {
+  flex: 1;
+  background: #252525;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  padding: 6px 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.nds-option-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+.nds-option-btn.active {
+  background: rgba(229, 9, 20, 0.2);
+  border-color: #e50914;
+  color: #fff;
+}

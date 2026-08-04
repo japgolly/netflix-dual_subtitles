@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Netflix Dual Subtitles</title>
+  <style>
+    body {
+      width: 260px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #141414;
+      color: #ffffff;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 12px;
+    }
+    .logo-badge {
+      background: #e50914;
+      color: white;
+      font-weight: 900;
+      font-size: 14px;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .status-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 22px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #444; transition: .2s; border-radius: 22px;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 16px; width: 16px; left: 3px; bottom: 3px;
+      background-color: white; transition: .2s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: #e50914; }
+    input:checked + .slider:before { transform: translateX(18px); }
+    .info {
+      font-size: 12px;
+      color: #999;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      text-align: center;
+      padding: 8px 0;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      box-sizing: border-box;
+      transition: background 0.2s ease;
+    }
+    .btn:hover {
+      background: #e50914;
+      border-color: #e50914;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-badge">N</div>
+    <div class="title">Dual Subtitles</div>
+  </div>
+
+  <div class="status-card">
+    <span>Enable Subtitles</span>
+    <label class="toggle">
+      <input type="checkbox" id="popup-enable" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="info">
+    Open any video on Netflix. Use the <strong>💬 Dual Subs</strong> button in the Netflix player bar to choose languages and customize text styles.
+  </div>
+
+  <a class="btn" href="https://www.netflix.com" target="_blank">Open Netflix</a>
+
+  <script src="popup.js"></script>
+</body>
+</html>
