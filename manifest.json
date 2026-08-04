@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Netflix Dual Subtitles",
-  "version": "1.1.0",
-  "description": "Watch Netflix with two subtitle tracks simultaneously and automatic Japanese Furigana annotations.",
+  "version": "1.2.0",
+  "description": "Watch Netflix with two subtitle tracks simultaneously and full Kuromoji.js Japanese Furigana annotations.",
   "permissions": [
     "storage"
   ],
@@ -29,6 +29,7 @@
         "*://*.netflix.com/*"
       ],
       "js": [
+        "kuromoji.js",
         "furigana.js",
         "content.js"
       ],
@@ -41,7 +42,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "injected.js"
+        "injected.js",
+        "kuromoji.js",
+        "dict/*"
       ],
       "matches": [
         "*://*.netflix.com/*"

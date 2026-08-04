@@ -1,85 +1,49 @@
 (function () {
   'use strict';
 
-  // Kanji regex range
+  // Kanji & Japanese Regex Ranges
   const KANJI_REGEX = /[\u4e00-\u9faf\u3400-\u4dbf]/;
   const JAPANESE_CHAR_REGEX = /[\u3040-\u30ff\u4e00-\u9faf]/;
 
-  // Japanese Segmenter (built into Chrome V8)
-  let segmenter = null;
-  try {
-    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-      segmenter = new Intl.Segmenter('ja', { granularity: 'word' });
+  let kuromojiTokenizer = null;
+  let isInitializing = false;
+
+  function initKuromoji() {
+    if (kuromojiTokenizer || isInitializing) return;
+    isInitializing = true;
+
+    if (typeof kuromoji === 'undefined') {
+      console.error('[Netflix Dual Subtitles] Kuromoji library not loaded');
+      isInitializing = false;
+      return;
     }
-  } catch (e) {}
 
-  // Comprehensive Japanese Compound Vocabulary Readings Map
-  const WORD_READINGS = new Map([
-    // Nouns & Basics
-    ['私', 'わたし'], ['僕', 'ぼく'], ['俺', 'おれ'], ['君', 'きみ'], ['彼', 'かれ'], ['彼女', 'かのじょ'],
-    ['人', 'ひと'], ['人間', 'にんげん'], ['何', 'なに'], ['今', 'いま'], ['今日', 'きょう'], ['明日', 'あした'],
-    ['昨日', 'きのう'], ['日', 'ひ'], ['月', 'つき'], ['火', 'ひ'], ['水', 'みず'], ['木', 'き'], ['金', 'かね'],
-    ['土', 'つち'], ['年', 'とし'], ['時', 'とき'], ['時間', 'じかん'], ['分', 'ふん'], ['秒', 'びょう'],
-    ['週', 'しゅう'], ['学校', 'がっこう'], ['先生', 'せんせい'], ['学生', 'がくせい'], ['友達', 'ともだち'],
-    ['家', 'いえ'], ['家族', 'かぞく'], ['車', 'くるま'], ['電車', 'でんしゃ'], ['駅', 'えき'], ['場所', 'ばしょ'],
-    ['日本', 'にほん'], ['日本語', 'にほんご'], ['英語', 'えいご'], ['世界', 'せかい'], ['国', 'くに'],
-    ['心', 'こころ'], ['愛', 'あい'], ['命', 'いのち'], ['夢', 'ゆめ'], ['光', 'ひかり'], ['影', 'かげ'],
-    ['声', 'こえ'], ['顔', 'かお'], ['目', 'め'], ['耳', 'みみ'], ['口', 'くち'], ['手', 'て'], ['足', 'あし'],
-    ['体', 'からだ'], ['頭', 'あたま'], ['心臓', 'しんぞう'], ['血', 'ち'], ['天', 'てん'], ['空', 'そら'],
-    ['海', 'うみ'], ['山', 'やま'], ['川', 'かわ'], ['雨', 'あめ'], ['雪', 'ゆき'], ['風', 'かぜ'], ['花', 'はな'],
-    ['神', 'かみ'], ['王', 'おう'], ['魔王', 'まおう'], ['悪魔', 'あくま'], ['天使', 'てんし'], ['怪物', 'かいぶつ'],
-    ['物', 'もの'], ['事', 'こと'], ['前', 'まえ'], ['後', 'あと'], ['上', 'うえ'], ['下', 'した'], ['中', 'なか'],
-    ['外', 'そと'], ['右', 'みぎ'], ['左', 'ひだり'], ['大', 'おお'], ['小', 'ちい'], ['高', 'たか'],
-    ['本当', 'ほんとう'], ['大丈夫', 'だいじょうぶ'], ['質問', 'しつもん'], ['問題', 'もんだい'], ['意味', 'いみ'],
-    ['約束', 'やくそく'], ['秘密', 'ひみつ'], ['運命', 'うんめい'], ['未来', 'みらい'], ['過去', 'かこ'],
-    ['現実', 'げんじつ'], ['真実', 'しんじつ'], ['悪', 'あく'], ['正義', 'せいぎ'], ['勇気', 'ゆうき'],
-    ['希望', 'きぼう'], ['絶望', 'ぜつぼう'], ['攻撃', 'こうげき'], ['防御', 'ぼうぎょ'], ['魔法', 'まほう'],
-    ['武器', 'ぶき'], ['刀', 'かたな'], ['剣', 'けん'], ['銃', 'じゅう'], ['仲間', 'なかま'], ['敵', 'てき'],
-    ['味方', 'みかた'], ['写真', 'しゃしん'], ['映画', 'えいが'], ['音楽', 'おんがく'], ['本', 'ほん'],
-    ['名前', 'なまえ'], ['最後', 'さいご'], ['最初', 'さいしょ'], ['全然', 'ぜんぜん'], ['絶対', 'ぜったい'],
-    ['仕事', 'しごと'], ['会社', 'かいしゃ'], ['電話', 'でんわ'], ['部屋', 'へや'], ['料理', 'りょうり'],
-    ['男', 'おとこ'], ['女', 'おんな'], ['子供', 'こども'], ['大人', 'おとな'], ['父', 'ちち'], ['母', 'はは'],
-    ['兄', 'あに'], ['弟', 'おとうと'], ['姉', 'あね'], ['妹', 'いもうと'], ['夫', 'おっと'], ['妻', 'つま'],
-    ['勇者', 'ゆうしゃ'], ['英雄', 'えいゆう'], ['警察', 'けいさつ'], ['医者', 'いしゃ'], ['病院', 'びょういん'],
-    ['歴史', 'れきし'], ['社会', 'しゃかい'], ['文化', 'ぶんか'], ['地球', 'ちきゅう'], ['宇宙', 'うちゅう'],
-    ['星', 'ほし'], ['太陽', 'たいよう'], ['夜', 'よる'], ['朝', 'あさ'], ['昼', 'ひる'], ['夕方', 'ゆうがた']
-  ]);
+    try {
+      const dictPath = chrome.runtime.getURL('dict/');
+      console.log('[Netflix Dual Subtitles] Initializing Kuromoji.js with dictPath:', dictPath);
 
-  // Comprehensive Single Kanji Character Reading Fallback Dictionary
-  const KANJI_CHAR_READINGS = new Map([
-    // Basic & Common Actions
-    ['食', 'た'], ['飲', 'の'], ['買', 'か'], ['売', 'う'], ['走', 'はし'], ['泳', 'およ'],
-    ['飛', 'と'], ['投', 'な'], ['持', 'も'], ['置', 'お'], ['取', 'と'], ['切', 'き'],
-    ['見', 'み'], ['聞', 'き'], ['話', 'はなし'], ['言', 'い'], ['思', 'おも'], ['知', 'し'],
-    ['行', 'い'], ['来', 'き'], ['出', 'で'], ['入', 'はい'], ['立', 'た'], ['座', 'すわ'],
-    ['待', 'ま'], ['会', 'あ'], ['開', 'あ'], ['閉', 'し'], ['始', 'はじ'], ['終', 'おわ'],
-    ['勝', 'か'], ['負', 'ま'], ['助', 'たす'], ['守', 'まも'], ['殺', 'ころ'], ['死', 'し'],
-    ['生', 'い'], ['変', 'へん'], ['同', 'おな'], ['違', 'ちが'], ['書', 'か'], ['読', 'よ'],
-    ['作', 'つく'], ['使', 'つか'], ['探', 'さが'], ['選', 'えら'], ['決', 'き'], ['逃', 'に'],
-    ['隠', 'かく'], ['考', 'かんが'], ['覚', 'おぼ'], ['忘', 'わす'], ['笑', 'わら'], ['泣', 'な'],
-    ['怒', 'おこ'], ['驚', 'おどろ'], ['恐', 'おそ'], ['払', 'はら'], ['働', 'はたら'], ['遊', 'あそ'],
-    ['着', 'き'], ['脱', 'ぬ'], ['歩', 'ある'], ['止', 'と'], ['曲', 'まが'], ['通', 'とお'],
+      kuromoji.builder({ dicPath: dictPath }).build((err, tokenizer) => {
+        if (err) {
+          console.error('[Netflix Dual Subtitles] Error building Kuromoji tokenizer:', err);
+          isInitializing = false;
+          return;
+        }
+        kuromojiTokenizer = tokenizer;
+        console.log('[Netflix Dual Subtitles] Kuromoji.js Tokenizer built successfully!');
+      });
+    } catch (e) {
+      console.error('[Netflix Dual Subtitles] Exception initializing Kuromoji:', e);
+      isInitializing = false;
+    }
+  }
 
-    // Descriptives / Adjectives
-    ['大', 'おお'], ['小', 'ちい'], ['高', 'たか'], ['安', 'やす'], ['新', 'あたら'], ['古', 'ふる'],
-    ['多', 'おお'], ['少', 'すく'], ['長', 'なが'], ['短', 'みじか'], ['早', 'はや'], ['遅', 'おそ'],
-    ['重', 'おも'], ['軽', 'かる'], ['強', 'つよ'], ['弱', 'よわ'], ['暗', 'くら'], ['明', 'あか'],
-    ['暑', 'あつ'], ['寒', 'さむ'], ['暖', 'あたた'], ['涼', 'すず'], ['美', 'うつく'], ['汚', 'きたな'],
-    ['痛', 'いた'], ['楽', 'たの'], ['苦', 'くる'], ['悲', 'かな'], ['幸', 'しあわ'], ['嫌', 'いや'],
-    ['熱', 'あつ'], ['冷', 'つめ'], ['広', 'ひろ'], ['狭', 'せま'], ['近', 'ちか'], ['遠', 'とお'],
-
-    // People & Nature & Nouns
-    ['私', 'わたし'], ['人', 'ひと'], ['男', 'おとこ'], ['女', 'おんな'], ['子', 'こ'], ['親', 'おや'],
-    ['父', 'ちち'], ['母', 'はは'], ['友', 'とも'], ['敵', 'てき'], ['神', 'かみ'], ['王', 'おう'],
-    ['魔', 'ま'], ['物', 'もの'], ['事', 'こと'], ['名', 'な'], ['目', 'め'], ['耳', 'みみ'],
-    ['口', 'くち'], ['手', 'て'], ['足', 'あし'], ['心', 'こころ'], ['声', 'こえ'], ['顔', 'かお'],
-    ['日', 'ひ'], ['月', 'つき'], ['火', 'ひ'], ['水', 'みず'], ['木', 'き'], ['金', 'かね'],
-    ['土', 'つち'], ['山', 'やま'], ['川', 'かわ'], ['海', 'うみ'], ['空', 'そら'], ['雨', 'あめ'],
-    ['雪', 'ゆき'], ['風', 'かぜ'], ['花', 'はな'], ['石', 'いし'], ['光', 'ひかり'], ['影', 'かげ'],
-    ['天', 'てん'], ['地', 'ち'], ['星', 'ほし'], ['夜', 'よる'], ['朝', 'あさ'], ['昼', 'ひる'],
-    ['車', 'くるま'], ['家', 'いえ'], ['国', 'くに'], ['町', 'まち'], ['村', 'むら'], ['島', 'しま'],
-    ['道', 'みち'], ['店', 'みせ'], ['室', 'しつ'], ['病', 'びょう'], ['校', 'こう'], ['駅', 'えき']
-  ]);
+  // Convert Katakana to Hiragana
+  function kataToHira(str) {
+    if (!str) return '';
+    return str.replace(/[\u30a1-\u30f6]/g, (match) => {
+      return String.fromCharCode(match.charCodeAt(0) - 0x60);
+    });
+  }
 
   function escapeHtml(str) {
     if (typeof str !== 'string') return '';
@@ -96,63 +60,46 @@
       return escapeHtml(text || '');
     }
 
-    try {
-      let segments = [];
-      if (segmenter) {
-        const iter = segmenter.segment(text);
-        for (const seg of iter) {
-          segments.push(seg.segment);
-        }
-      } else {
-        segments = [text];
-      }
+    if (!kuromojiTokenizer) {
+      initKuromoji();
+      return escapeHtml(text);
+    }
 
+    try {
+      const tokens = kuromojiTokenizer.tokenize(text);
       let resultHtml = '';
 
-      for (let word of segments) {
-        if (!KANJI_REGEX.test(word)) {
-          resultHtml += escapeHtml(word);
+      for (const token of tokens) {
+        const surface = token.surface_form;
+        const reading = token.reading ? kataToHira(token.reading) : null;
+
+        if (!KANJI_REGEX.test(surface)) {
+          resultHtml += escapeHtml(surface);
           continue;
         }
 
-        // 1. Check Compound Word Dictionary Map
-        if (WORD_READINGS.has(word)) {
-          const reading = WORD_READINGS.get(word);
-          resultHtml += `<ruby>${escapeHtml(word)}<rt>${reading}</rt></ruby>`;
-          continue;
+        if (reading && reading !== surface) {
+          resultHtml += `<ruby>${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`;
+        } else {
+          resultHtml += escapeHtml(surface);
         }
-
-        // 2. Process individual kanji characters in word using Kanji Fallback Dictionary
-        let wordHtml = '';
-        for (let i = 0; i < word.length; i++) {
-          const char = word[i];
-          if (KANJI_REGEX.test(char)) {
-            const reading = WORD_READINGS.get(char) || KANJI_CHAR_READINGS.get(char);
-            if (reading) {
-              wordHtml += `<ruby>${escapeHtml(char)}<rt>${reading}</rt></ruby>`;
-            } else {
-              // Fallback for unlisted kanji: render kanji
-              wordHtml += escapeHtml(char);
-            }
-          } else {
-            wordHtml += escapeHtml(char);
-          }
-        }
-
-        resultHtml += wordHtml;
       }
 
       return resultHtml;
     } catch (e) {
-      console.error('[Netflix Dual Subtitles] Furigana processing error:', e);
+      console.error('[Netflix Dual Subtitles] Kuromoji Furigana conversion error:', e);
       return escapeHtml(text);
     }
   }
 
-  // Export to global window object
+  // Initialize Kuromoji on load
+  initKuromoji();
+
+  // Export module
   window.NetflixDualSubsFurigana = {
     toFurigana: toFurigana,
-    isJapanese: (str) => typeof str === 'string' && JAPANESE_CHAR_REGEX.test(str)
+    isJapanese: (str) => typeof str === 'string' && JAPANESE_CHAR_REGEX.test(str),
+    isReady: () => kuromojiTokenizer !== null
   };
 
 })();
