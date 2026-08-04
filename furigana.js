@@ -55,6 +55,53 @@
       .replace(/'/g, '&#039;');
   }
 
+  // Smart Okurigana & Kana Alignment
+  function alignFurigana(surface, reading) {
+    if (!KANJI_REGEX.test(surface)) {
+      return escapeHtml(surface);
+    }
+
+    if (!reading || reading === surface) {
+      return escapeHtml(surface);
+    }
+
+    // 1. Trim common prefix (e.g. お, ご)
+    let prefixLen = 0;
+    while (
+      prefixLen < surface.length &&
+      prefixLen < reading.length &&
+      surface[prefixLen] === reading[prefixLen] &&
+      !KANJI_REGEX.test(surface[prefixLen])
+    ) {
+      prefixLen++;
+    }
+
+    const prefix = surface.slice(0, prefixLen);
+    let restSurface = surface.slice(prefixLen);
+    let restReading = reading.slice(prefixLen);
+
+    // 2. Trim common suffix (Okurigana e.g. こえ in 聞こえ, べます in 食べます)
+    let suffixLen = 0;
+    while (
+      suffixLen < restSurface.length &&
+      suffixLen < restReading.length &&
+      restSurface[restSurface.length - 1 - suffixLen] === restReading[restReading.length - 1 - suffixLen] &&
+      !KANJI_REGEX.test(restSurface[restSurface.length - 1 - suffixLen])
+    ) {
+      suffixLen++;
+    }
+
+    const suffix = restSurface.slice(restSurface.length - suffixLen);
+    const kanjiStem = restSurface.slice(0, restSurface.length - suffixLen);
+    const readingStem = restReading.slice(0, restReading.length - suffixLen);
+
+    if (kanjiStem && readingStem && KANJI_REGEX.test(kanjiStem)) {
+      return `${escapeHtml(prefix)}<ruby>${escapeHtml(kanjiStem)}<rt>${escapeHtml(readingStem)}</rt></ruby>${escapeHtml(suffix)}`;
+    }
+
+    return `${escapeHtml(prefix)}${escapeHtml(kanjiStem)}${escapeHtml(suffix)}`;
+  }
+
   function toFurigana(text) {
     if (!text || typeof text !== 'string' || !JAPANESE_CHAR_REGEX.test(text)) {
       return escapeHtml(text || '');
@@ -73,16 +120,7 @@
         const surface = token.surface_form;
         const reading = token.reading ? kataToHira(token.reading) : null;
 
-        if (!KANJI_REGEX.test(surface)) {
-          resultHtml += escapeHtml(surface);
-          continue;
-        }
-
-        if (reading && reading !== surface) {
-          resultHtml += `<ruby>${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`;
-        } else {
-          resultHtml += escapeHtml(surface);
-        }
+        resultHtml += alignFurigana(surface, reading);
       }
 
       return resultHtml;
