@@ -1,21 +1,20 @@
 (function () {
-  'use me strict';
+  'use strict';
   if (window.__netflixDualSubsInjected) return;
   window.__netflixDualSubsInjected = true;
 
   console.log('[Netflix Dual Subtitles] Main world script initialized');
 
-  const capturedSubtitles = new Map(); // language/bcp47 or trackId -> Cues array
+  let pendingTrackId = null;
 
   // Parse time helper (HH:MM:SS.mmm or seconds or ticks)
   function parseTime(timeStr) {
-    if (typeof timeStr === 'number') return timeStr / 1000; // if ms
+    if (typeof timeStr === 'number') return timeStr / 1000;
     if (!timeStr) return 0;
     
-    // Check if ends with 's' or 'ms' or 't'
     if (timeStr.endsWith('ms')) return parseFloat(timeStr) / 1000;
     if (timeStr.endsWith('s')) return parseFloat(timeStr);
-    if (timeStr.endsWith('t')) return parseFloat(timeStr) / 10000000; // ticks
+    if (timeStr.endsWith('t')) return parseFloat(timeStr) / 10000000;
 
     const parts = timeStr.split(':');
     if (parts.length === 3) {
@@ -52,7 +51,6 @@
           end = start + parseTime(durAttr);
         }
 
-        // Clean text and inner elements (br, span)
         let textHtml = p.innerHTML
           .replace(/<br\s*\/?>/gi, '\n')
           .replace(/<[^>]+>/g, '')
@@ -72,7 +70,6 @@
   function parseJSONTimedText(jsonObj) {
     const cues = [];
     try {
-      // Format 1: events
       const events = jsonObj.events || (jsonObj.result && jsonObj.result.timedtext) || [];
       events.forEach((evt) => {
         const start = (evt.start || evt.startTime || 0) / 1000;
@@ -126,7 +123,6 @@
     return cues;
   }
 
-  // General Parser Dispatcher
   function parseSubtitlePayload(responseText, url) {
     let cues = [];
     if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
@@ -142,60 +138,6 @@
     return cues;
   }
 
-  // Intercept Network Requests (XHR & Fetch)
-  const origOpen = XMLHttpRequest.prototype.open;
-  const origSend = XMLHttpRequest.prototype.send;
-
-  XMLHttpRequest.prototype.open = function (method, url) {
-    this._url = url;
-    return origOpen.apply(this, arguments);
-  };
-
-  XMLHttpRequest.prototype.send = function () {
-    this.addEventListener('load', function () {
-      if (this._url && (this._url.includes('timedtext') || this._url.includes('ttml') || this._url.includes('dfxp') || this._url.includes('vtt') || this._url.includes('/?o='))) {
-        try {
-          const cues = parseSubtitlePayload(this.responseText, this._url);
-          if (cues.length > 0) {
-            window.postMessage({
-              type: 'NETFLIX_DUAL_SUB_CAPTURED',
-              url: this._url,
-              cues: cues
-            }, '*');
-          }
-        } catch (err) {
-          console.error('[Netflix Dual Subtitles] Subtitle XHR processing error:', err);
-        }
-      }
-    });
-    return origSend.apply(this, arguments);
-  };
-
-  const origFetch = window.fetch;
-  window.fetch = async function () {
-    const response = await origFetch.apply(this, arguments);
-    const url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url ? arguments[0].url : '');
-    
-    if (url && (url.includes('timedtext') || url.includes('ttml') || url.includes('dfxp') || url.includes('vtt') || url.includes('/?o='))) {
-      try {
-        const clone = response.clone();
-        const text = await clone.text();
-        const cues = parseSubtitlePayload(text, url);
-        if (cues.length > 0) {
-          window.postMessage({
-            type: 'NETFLIX_DUAL_SUB_CAPTURED',
-            url: url,
-            cues: cues
-          }, '*');
-        }
-      } catch (err) {
-        console.error('[Netflix Dual Subtitles] Subtitle fetch processing error:', err);
-      }
-    }
-    return response;
-  };
-
-  // Helper to interact with Netflix Player API
   function getNetflixPlayer() {
     try {
       const playerAPI = window.netflix && window.netflix.appContext && window.netflix.appContext.state && window.netflix.appContext.state.playerApp && window.netflix.appContext.state.playerApp.getAPI && window.netflix.appContext.state.playerApp.getAPI().videoPlayer;
@@ -210,6 +152,97 @@
     return null;
   }
 
+  function extractTrackLabel(t, index) {
+    if (!t) return `Track ${index + 1}`;
+    if (typeof t === 'string') return t;
+    
+    return t.languageDescription || 
+           t.displayName || 
+           t.label || 
+           t.language || 
+           t.name || 
+           t.bcp47 || 
+           (t.rawTrack && (t.rawTrack.languageDescription || t.rawTrack.displayName || t.rawTrack.label || t.rawTrack.bcp47)) ||
+           t.id || 
+           t.trackId || 
+           `Track ${index + 1}`;
+  }
+
+  function extractTrackId(t, index) {
+    if (!t) return `track_${index}`;
+    if (typeof t === 'string') return t;
+    return t.id || t.trackId || t.bcp47 || extractTrackLabel(t, index);
+  }
+
+  function getCurrentActiveTrackInfo() {
+    const player = getNetflixPlayer();
+    if (!player) return { trackId: pendingTrackId, bcp47: null };
+
+    const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
+    if (currentTrack) {
+      return {
+        trackId: extractTrackId(currentTrack, 0),
+        bcp47: currentTrack.bcp47 || currentTrack.language || null
+      };
+    }
+    return { trackId: pendingTrackId, bcp47: null };
+  }
+
+  // Intercept Network Requests (XHR & Fetch)
+  function handleInterceptedSubtitles(responseText, url) {
+    try {
+      const cues = parseSubtitlePayload(responseText, url);
+      if (cues.length > 0) {
+        const trackInfo = getCurrentActiveTrackInfo();
+        const activeTrackId = pendingTrackId || trackInfo.trackId;
+
+        console.log(`[Netflix Dual Subtitles] Intercepted ${cues.length} cues for trackId: ${activeTrackId}`);
+
+        window.postMessage({
+          type: 'NETFLIX_DUAL_SUB_CAPTURED',
+          url: url,
+          trackId: activeTrackId,
+          bcp47: trackInfo.bcp47,
+          cues: cues
+        }, '*');
+      }
+    } catch (err) {
+      console.error('[Netflix Dual Subtitles] Subtitle processing error:', err);
+    }
+  }
+
+  const origOpen = XMLHttpRequest.prototype.open;
+  const origSend = XMLHttpRequest.prototype.send;
+
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this._url = url;
+    return origOpen.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.send = function () {
+    this.addEventListener('load', function () {
+      if (this._url && (this._url.includes('timedtext') || this._url.includes('ttml') || this._url.includes('dfxp') || this._url.includes('vtt') || this._url.includes('/?o='))) {
+        handleInterceptedSubtitles(this.responseText, this._url);
+      }
+    });
+    return origSend.apply(this, arguments);
+  };
+
+  const origFetch = window.fetch;
+  window.fetch = async function () {
+    const response = await origFetch.apply(this, arguments);
+    const url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url ? arguments[0].url : '');
+    
+    if (url && (url.includes('timedtext') || url.includes('ttml') || url.includes('dfxp') || url.includes('vtt') || url.includes('/?o='))) {
+      try {
+        const clone = response.clone();
+        const text = await clone.text();
+        handleInterceptedSubtitles(text, url);
+      } catch (err) {}
+    }
+    return response;
+  };
+
   // Periodic poll to check player status and inform content script
   setInterval(() => {
     const player = getNetflixPlayer();
@@ -219,24 +252,24 @@
       const timedTextTracks = player.getTimedTextTrackList ? player.getTimedTextTrackList() : [];
       const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
 
-      const tracks = timedTextTracks.map(t => ({
-        id: t.id || t.trackId || t.bcp47,
-        language: t.language || t.bcp47,
-        label: t.label || t.languageDescription || t.language,
-        bcp47: t.bcp47 || t.language,
-        isNone: t.rawTrack ? t.rawTrack.isNone : false,
+      const tracks = timedTextTracks.map((t, idx) => ({
+        id: extractTrackId(t, idx),
+        language: t.language || t.bcp47 || 'unk',
+        label: extractTrackLabel(t, idx),
+        bcp47: t.bcp47 || t.language || 'unk',
+        isNone: t.rawTrack ? (t.rawTrack.isNone || t.rawTrack.trackType === 'OFF') : (t.isOff || false),
         raw: t
       }));
+
+      const primaryId = currentTrack ? extractTrackId(currentTrack, 0) : null;
 
       window.postMessage({
         type: 'NETFLIX_DUAL_SUB_PLAYER_STATE',
         tracks: tracks,
-        currentPrimaryTrackId: currentTrack ? (currentTrack.id || currentTrack.bcp47) : null
+        currentPrimaryTrackId: primaryId
       }, '*');
-    } catch (err) {
-      // Silent catch for player API polling transitions
-    }
-  }, 2000);
+    } catch (err) {}
+  }, 1500);
 
   // Listen for requests from content.js to select secondary track via Netflix player API
   window.addEventListener('message', (event) => {
@@ -249,20 +282,22 @@
 
       try {
         const timedTextTracks = player.getTimedTextTrackList ? player.getTimedTextTrackList() : [];
-        const match = timedTextTracks.find(t => (t.id || t.trackId || t.bcp47) === targetTrackId);
+        const match = timedTextTracks.find((t, idx) => extractTrackId(t, idx) === targetTrackId);
         if (match) {
-          // Temporarily request track or download payload using player internals
           if (player.setTimedTextTrack) {
-            // Note: If player.setTimedTextTrack switches the native subtitle, Netflix will trigger network request which our XHR/fetch hook captures automatically.
             const previousTrack = player.getTimedTextTrack();
+            pendingTrackId = targetTrackId;
+            console.log('[Netflix Dual Subtitles] Requesting secondary track load for:', targetTrackId);
+            
             player.setTimedTextTrack(match);
             
-            // Switch back to primary after brief delay if necessary
-            if (previousTrack && previousTrack !== match) {
-              setTimeout(() => {
+            // Switch back to primary after Netflix fetches secondary timedtext
+            setTimeout(() => {
+              if (previousTrack && previousTrack !== match) {
                 player.setTimedTextTrack(previousTrack);
-              }, 400);
-            }
+              }
+              pendingTrackId = null;
+            }, 800);
           }
         }
       } catch (err) {

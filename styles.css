@@ -1,5 +1,17 @@
 /* Netflix Dual Subtitles Modern UI Design System */
 
+/* Root Host Element */
+#nds-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2147483647 !important;
+  font-family: Netflix Sans, Helvetica Neue, Segoe UI, Roboto, sans-serif;
+}
+
 /* Secondary Subtitle Overlay Container */
 #netflix-dual-sub-overlay {
   position: absolute;
@@ -8,9 +20,8 @@
   width: 85%;
   max-width: 1000px;
   text-align: center;
-  z-index: 99999;
+  z-index: 2147483646;
   pointer-events: none;
-  font-family: Netflix Sans, Helvetica Neue, Segoe UI, Roboto, sans-serif;
   user-select: none;
   transition: bottom 0.2s ease, top 0.2s ease;
 }
@@ -28,14 +39,14 @@
 /* Secondary Subtitle Text Box */
 .nds-cue-box {
   display: inline-block;
-  padding: 4px 14px;
-  border-radius: 6px;
+  padding: 6px 16px;
+  border-radius: 8px;
   color: #ffffff;
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
   transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 /* Font Sizes */
@@ -46,13 +57,13 @@
 
 /* Text Style Variants */
 .nds-style-bg .nds-cue-box {
-  background-color: rgba(0, 0, 0, 0.75);
+  background-color: rgba(0, 0, 0, 0.85);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .nds-style-outline .nds-cue-box {
-  background-color: transparent;
-  color: #ffd700; /* Distinct golden accent or crisp white */
+  background-color: rgba(0, 0, 0, 0.25);
+  color: #ffd700;
   text-shadow: 
     -2px -2px 0 #000,
      2px -2px 0 #000,
@@ -61,67 +72,73 @@
      0 3px 6px rgba(0, 0, 0, 0.9);
 }
 
-/* Floating Player Control Trigger Button */
-.nds-trigger-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(20, 20, 20, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-left: 12px;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
+/* Floating Player Control Trigger Button (Top Right of Player) */
+#nds-trigger-btn {
+  position: absolute !important;
+  top: 24px !important;
+  right: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(18, 18, 18, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  border-radius: 20px !important;
+  padding: 8px 16px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(12px) !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6) !important;
 }
 
-.nds-trigger-btn:hover {
-  background: rgba(229, 9, 20, 0.85);
-  border-color: #e50914;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
+#nds-trigger-btn:hover {
+  background: rgba(229, 9, 20, 0.95) !important;
+  border-color: #e50914 !important;
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: 0 6px 20px rgba(229, 9, 20, 0.6) !important;
 }
 
-.nds-trigger-btn.active {
-  background: #e50914;
-  border-color: #e50914;
-  color: #ffffff;
+#nds-trigger-btn.active {
+  background: #e50914 !important;
+  border-color: #e50914 !important;
+  color: #ffffff !important;
 }
 
 .nds-icon {
   margin-right: 6px;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 /* Control Panel Modal / Drawer */
 #netflix-dual-sub-panel {
-  position: absolute;
-  bottom: 80px;
-  right: 40px;
-  width: 320px;
-  background: rgba(18, 18, 18, 0.92);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
-  z-index: 999999;
-  color: #fff;
-  font-family: Netflix Sans, Helvetica Neue, Segoe UI, sans-serif;
+  position: absolute !important;
+  top: 70px !important;
+  right: 24px !important;
+  width: 320px !important;
+  background: rgba(18, 18, 18, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 16px !important;
+  padding: 20px !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.9) !important;
+  z-index: 2147483647 !important;
+  color: #fff !important;
+  display: none !important;
   opacity: 0;
-  transform: translateY(10px) scale(0.96);
-  pointer-events: none;
+  transform: translateY(-10px) scale(0.96);
+  pointer-events: none !important;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 #netflix-dual-sub-panel.show {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
+  display: block !important;
+  opacity: 1 !important;
+  transform: translateY(0) scale(1) !important;
+  pointer-events: auto !important;
 }
 
 /* Panel Header */
@@ -129,7 +146,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   padding-bottom: 12px;
   margin-bottom: 16px;
 }
@@ -151,9 +168,10 @@
 .nds-close-btn {
   background: none;
   border: none;
-  color: #888;
+  color: #aaa;
   font-size: 18px;
   cursor: pointer;
+  padding: 4px 8px;
   transition: color 0.15s ease;
 }
 
@@ -168,8 +186,8 @@
 
 .nds-label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   color: #aaa;
   margin-bottom: 6px;
@@ -230,7 +248,7 @@ input:checked + .nds-slider:before {
   width: 100%;
   background: #252525;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 13px;
@@ -252,7 +270,7 @@ input:checked + .nds-slider:before {
 .nds-option-btn {
   flex: 1;
   background: #252525;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #ccc;
   padding: 6px 0;
   border-radius: 6px;
@@ -269,7 +287,7 @@ input:checked + .nds-slider:before {
 }
 
 .nds-option-btn.active {
-  background: rgba(229, 9, 20, 0.2);
+  background: rgba(229, 9, 20, 0.3);
   border-color: #e50914;
   color: #fff;
 }

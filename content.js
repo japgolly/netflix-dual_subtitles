@@ -15,17 +15,26 @@
 
   injectMainWorldScript();
 
+  // Helper to find the active Netflix player container
+  function getPlayerContainer() {
+    return document.querySelector('.watch-video') || 
+           document.querySelector('[data-uia="watch-video"]') || 
+           document.querySelector('.videoplayer') || 
+           document.body;
+  }
+
   // State
   const state = {
     enabled: true,
     secondaryTrackId: null,
     tracks: [],
-    cuesMap: new Map(), // url or trackId -> cues
+    cuesMap: new Map(),
     activeCues: [],
-    fontSize: 'medium', // small, medium, large, xlarge
-    position: 'bottom', // top, bottom
-    textStyle: 'bg', // bg, outline
-    currentPrimaryTrackId: null
+    fontSize: 'medium',
+    position: 'bottom',
+    textStyle: 'bg',
+    currentPrimaryTrackId: null,
+    panelVisible: false
   };
 
   // Load saved preferences
@@ -53,6 +62,7 @@
   }
 
   // DOM Elements
+  let rootEl = null;
   let overlayEl = null;
   let cueBoxEl = null;
   let panelEl = null;
@@ -60,15 +70,32 @@
   let videoEl = null;
   let animFrameId = null;
 
+  // Build / Ensure Root Host
+  function ensureRootHost() {
+    const playerContainer = getPlayerContainer();
+
+    if (!rootEl || !rootEl.isConnected) {
+      rootEl = document.getElementById('nds-root');
+      if (!rootEl) {
+        rootEl = document.createElement('div');
+        rootEl.id = 'nds-root';
+      }
+    }
+
+    if (rootEl.parentNode !== playerContainer) {
+      playerContainer.appendChild(rootEl);
+    }
+  }
+
   // Create Subtitle Overlay
   function createOverlay() {
+    ensureRootHost();
+
     if (document.getElementById('netflix-dual-sub-overlay')) {
       overlayEl = document.getElementById('netflix-dual-sub-overlay');
       cueBoxEl = overlayEl.querySelector('.nds-cue-box');
       return;
     }
-
-    const playerContainer = document.querySelector('.watch-video') || document.body;
 
     overlayEl = document.createElement('div');
     overlayEl.id = 'netflix-dual-sub-overlay';
@@ -78,7 +105,7 @@
     cueBoxEl.style.display = 'none';
 
     overlayEl.appendChild(cueBoxEl);
-    playerContainer.appendChild(overlayEl);
+    rootEl.appendChild(overlayEl);
 
     updateOverlayStyles();
   }
@@ -99,7 +126,6 @@
       return;
     }
 
-    // Find current active cue(s)
     const matchingCues = state.activeCues.filter(c => currentTime >= c.start && currentTime <= c.end);
 
     if (matchingCues.length > 0) {
@@ -132,9 +158,54 @@
     tick();
   }
 
+  // Toggle Panel Helper
+  function setPanelVisibility(show) {
+    state.panelVisible = show === undefined ? !state.panelVisible : show;
+    console.log('[Netflix Dual Subtitles] Setting panel visibility to:', state.panelVisible);
+
+    if (!panelEl) createUI();
+    if (!panelEl) return;
+
+    if (state.panelVisible) {
+      panelEl.classList.add('show');
+    } else {
+      panelEl.classList.remove('show');
+    }
+  }
+
+  // Language Display Formatting
+  let languageNames = null;
+  try {
+    languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+  } catch (e) {}
+
+  function formatLanguageLabel(rawLabel, bcp47Code) {
+    if (rawLabel && rawLabel !== 'undefined' && !rawLabel.startsWith('undefined') && rawLabel !== 'unk') {
+      return rawLabel;
+    }
+
+    if (bcp47Code && bcp47Code !== 'undefined' && bcp47Code !== 'unk') {
+      try {
+        if (languageNames) {
+          const cleanCode = bcp47Code.split('-')[0];
+          const formatted = languageNames.of(cleanCode);
+          if (formatted) return formatted;
+        }
+      } catch (e) {}
+      return bcp47Code.toUpperCase();
+    }
+
+    return 'Subtitle Track';
+  }
+
   // Create UI Controls & Panel
   function createUI() {
-    if (document.getElementById('netflix-dual-sub-panel')) return;
+    ensureRootHost();
+
+    if (document.getElementById('netflix-dual-sub-panel')) {
+      panelEl = document.getElementById('netflix-dual-sub-panel');
+      return;
+    }
 
     // Control Panel
     panelEl = document.createElement('div');
@@ -187,46 +258,61 @@
       </div>
     `;
 
-    document.body.appendChild(panelEl);
+    rootEl.appendChild(panelEl);
+
+    // Prevent click events inside panel from bubbling to Netflix
+    ['click', 'mousedown', 'pointerdown'].forEach(evtType => {
+      panelEl.addEventListener(evtType, (e) => e.stopPropagation());
+    });
 
     // Add Events to Panel
-    document.getElementById('nds-close-panel').onclick = () => togglePanel(false);
+    const closeBtn = document.getElementById('nds-close-panel');
+    if (closeBtn) {
+      closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        setPanelVisibility(false);
+      };
+    }
     
     const enableCheckbox = document.getElementById('nds-toggle-enable');
-    enableCheckbox.onchange = (e) => {
-      state.enabled = e.target.checked;
-      savePreferences();
-      if (triggerBtnEl) triggerBtnEl.classList.toggle('active', state.enabled);
-    };
+    if (enableCheckbox) {
+      enableCheckbox.onchange = (e) => {
+        state.enabled = e.target.checked;
+        savePreferences();
+        if (triggerBtnEl) triggerBtnEl.classList.toggle('active', state.enabled);
+      };
+    }
 
     const langSelect = document.getElementById('nds-select-language');
-    langSelect.onchange = (e) => {
-      const selectedId = e.target.value;
-      state.secondaryTrackId = selectedId;
-      savePreferences();
+    if (langSelect) {
+      langSelect.onchange = (e) => {
+        const selectedId = e.target.value;
+        state.secondaryTrackId = selectedId;
+        savePreferences();
 
-      // Check if we already captured cues for this track
-      if (state.cuesMap.has(selectedId)) {
-        state.activeCues = state.cuesMap.get(selectedId);
-      } else {
-        // Ask injected.js to fetch/switch to this track
-        window.postMessage({
-          type: 'NETFLIX_DUAL_SUB_FETCH_TRACK',
-          trackId: selectedId
-        }, '*');
-      }
-    };
+        if (state.cuesMap.has(selectedId)) {
+          state.activeCues = state.cuesMap.get(selectedId);
+          console.log('[Netflix Dual Subtitles] Switched active cues to selected trackId:', selectedId);
+        } else {
+          console.log('[Netflix Dual Subtitles] Requesting fetch for secondary trackId:', selectedId);
+          window.postMessage({
+            type: 'NETFLIX_DUAL_SUB_FETCH_TRACK',
+            trackId: selectedId
+          }, '*');
+        }
+      };
+    }
 
     // Option Buttons Handler
     panelEl.querySelectorAll('.nds-option-btn').forEach(btn => {
       btn.onclick = (e) => {
+        e.stopPropagation();
         const type = btn.getAttribute('data-type');
         const val = btn.getAttribute('data-val');
 
         state[type] = val;
         savePreferences();
 
-        // Update active class within group
         btn.parentElement.querySelectorAll('.nds-option-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
@@ -237,40 +323,19 @@
     populateLanguageSelect();
   }
 
-  function togglePanel(show) {
-    if (!panelEl) createUI();
-    if (show === undefined) {
-      panelEl.classList.toggle('show');
-    } else {
-      panelEl.classList.toggle('show', show);
-    }
-  }
-
   // Inject Player Trigger Button
-  function injectTriggerButton() {
+  function createTriggerButton() {
+    ensureRootHost();
+
     if (document.getElementById('nds-trigger-btn')) return;
-
-    const controlBar = document.querySelector('[data-uia="control-audio-subtitle"]') || 
-                       document.querySelector('.watch-video--bottom-controls-container') ||
-                       document.querySelector('.controls-full-view');
-
-    if (!controlBar) return;
 
     triggerBtnEl = document.createElement('button');
     triggerBtnEl.id = 'nds-trigger-btn';
+    triggerBtnEl.type = 'button';
     triggerBtnEl.className = `nds-trigger-btn ${state.enabled ? 'active' : ''}`;
     triggerBtnEl.innerHTML = `<span class="nds-icon">💬</span> Dual Subs`;
 
-    triggerBtnEl.onclick = (e) => {
-      e.stopPropagation();
-      togglePanel();
-    };
-
-    if (controlBar.nextSibling) {
-      controlBar.parentNode.insertBefore(triggerBtnEl, controlBar.nextSibling);
-    } else {
-      controlBar.parentNode.appendChild(triggerBtnEl);
-    }
+    rootEl.appendChild(triggerBtnEl);
   }
 
   function populateLanguageSelect() {
@@ -280,15 +345,66 @@
     const currentVal = state.secondaryTrackId;
     langSelect.innerHTML = '<option value="">-- None (Off) --</option>';
 
-    state.tracks.forEach(t => {
+    const addedIds = new Set();
+
+    // 1. Tracks from Player API
+    state.tracks.forEach((t, idx) => {
       if (t.isNone) return;
+      const trackId = t.id || `track_${idx}`;
+      if (addedIds.has(trackId)) return;
+      addedIds.add(trackId);
+
+      const displayLabel = formatLanguageLabel(t.label, t.bcp47 || t.language);
+      const isPrimary = (trackId === state.currentPrimaryTrackId);
+
       const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.innerText = t.label + (t.id === state.currentPrimaryTrackId ? ' (Primary)' : '');
-      if (t.id === currentVal) opt.selected = true;
+      opt.value = trackId;
+      opt.innerText = displayLabel + (isPrimary ? ' (Primary)' : '');
+      if (trackId === currentVal) opt.selected = true;
       langSelect.appendChild(opt);
     });
+
+    // 2. Additional tracks captured via Network Interception
+    state.cuesMap.forEach((cues, key) => {
+      if (!addedIds.has(key)) {
+        addedIds.add(key);
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.innerText = `Captured Track (${cues.length} cues)`;
+        if (key === currentVal) opt.selected = true;
+        langSelect.appendChild(opt);
+      }
+    });
   }
+
+  // Global Capturing Event Listener for Trigger Clicks
+  window.addEventListener('click', (e) => {
+    const targetBtn = e.target.closest('#nds-trigger-btn') || e.target.closest('.nds-trigger-btn');
+    if (targetBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[Netflix Dual Subtitles] Trigger button clicked via global capture handler');
+      setPanelVisibility();
+    }
+  }, true);
+
+  window.addEventListener('pointerdown', (e) => {
+    const targetBtn = e.target.closest('#nds-trigger-btn') || e.target.closest('.nds-trigger-btn');
+    if (targetBtn) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
+  // Keyboard Shortcut: Alt + S or Option + S to toggle panel
+  window.addEventListener('keydown', (e) => {
+    if (e.altKey && (e.key === 's' || e.key === 'S' || e.code === 'KeyS')) {
+      e.preventDefault();
+      console.log('[Netflix Dual Subtitles] Alt+S shortcut pressed');
+      setPanelVisibility();
+    }
+  });
 
   // Listen to messages from injected.js
   window.addEventListener('message', (event) => {
@@ -297,14 +413,20 @@
     const data = event.data;
 
     if (data.type === 'NETFLIX_DUAL_SUB_CAPTURED') {
-      console.log(`[Netflix Dual Subtitles] Captured ${data.cues.length} cues`);
-      // Store cues map
-      state.cuesMap.set(data.url, data.cues);
+      console.log(`[Netflix Dual Subtitles] Captured ${data.cues.length} cues for trackId: ${data.trackId}`);
+
+      if (data.trackId) state.cuesMap.set(data.trackId, data.cues);
+      if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
+      if (data.url) state.cuesMap.set(data.url, data.cues);
       
-      // If we don't have secondary cues set yet or this is selected, set active
-      if (!state.activeCues || state.activeCues.length === 0 || state.secondaryTrackId === data.url) {
+      // If selected secondary language matches this captured track, activate cues immediately!
+      if (state.secondaryTrackId && (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.bcp47 || state.secondaryTrackId === data.url)) {
+        state.activeCues = data.cues;
+        console.log('[Netflix Dual Subtitles] Successfully activated secondary cues for selected language!');
+      } else if (!state.secondaryTrackId && (!state.activeCues || state.activeCues.length === 0)) {
         state.activeCues = data.cues;
       }
+      populateLanguageSelect();
     }
 
     if (data.type === 'NETFLIX_DUAL_SUB_PLAYER_STATE') {
@@ -320,8 +442,8 @@
   setInterval(() => {
     createOverlay();
     createUI();
-    injectTriggerButton();
-  }, 1000);
+    createTriggerButton();
+  }, 800);
 
   startSyncLoop();
 
