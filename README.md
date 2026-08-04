@@ -14,13 +14,13 @@ A Manifest V3 Chrome Extension that allows you to render two subtitle tracks sim
 1. Open Google Chrome and navigate to `chrome://extensions`.
 2. Enable **Developer mode** in the upper right corner.
 3. Click **Load unpacked**.
-4. Select the project directory: `/Users/golly/projects/public/netflix`.
+4. Select this project directory
 5. Open [Netflix](https://www.netflix.com) and start playing any video!
 
 ## Files Overview
 
-- [`manifest.json`](file:///Users/golly/projects/public/netflix/manifest.json): Extension configuration (Manifest V3).
-- [`injected.js`](file:///Users/golly/projects/public/netflix/injected.js): Main-world page script that intercepts Netflix subtitle network requests and hooks the Netflix Player API.
-- [`content.js`](file:///Users/golly/projects/public/netflix/content.js): Content script managing DOM overlay insertion, time loop sync, and control drawer UI.
-- [`styles.css`](file:///Users/golly/projects/public/netflix/styles.css): Sleek Netflix dark mode CSS design system.
-- [`popup.html`](file:///Users/golly/projects/public/netflix/popup.html) & [`popup.js`](file:///Users/golly/projects/public/netflix/popup.js): Toolbar action popup window.
+- [`manifest.json`](./manifest.json): Extension configuration (Manifest V3).
+- [`injected.js`](./injected.js): Main-world page script that intercepts Netflix subtitle network requests and hooks the Netflix Player API.
+- [`content.js`](./content.js): Content script managing DOM overlay insertion, time loop sync, and control drawer UI.
+- [`styles.css`](./styles.css): Sleek Netflix dark mode CSS design system.
+- [`popup.html`](./popup.html) & [`popup.js`](./popup.js): Toolbar action popup window.
