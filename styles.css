@@ -46,7 +46,6 @@
   white-space: pre-wrap;
   word-break: break-word;
   transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 /* Furigana Ruby Typography */
@@ -66,7 +65,9 @@
   color: #ffeb3b; /* Vibrant yellow reading annotation */
   font-weight: 700;
   user-select: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  text-shadow: none !important;
+  -webkit-text-stroke: 1px #000000;
+  paint-order: stroke fill;
 }
 
 /* Font Sizes */
@@ -78,18 +79,17 @@
 /* Text Style Variants */
 .nds-style-bg .nds-cue-box {
   background-color: rgba(0, 0, 0, 0.85);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  text-shadow: none !important;
 }
 
 .nds-style-outline .nds-cue-box {
-  background-color: rgba(0, 0, 0, 0.25);
-  color: #ffd700;
-  text-shadow: 
-    -2px -2px 0 #000,
-     2px -2px 0 #000,
-    -2px  2px 0 #000,
-     2px  2px 0 #000,
-     0 3px 6px rgba(0, 0, 0, 0.9);
+  background-color: transparent !important;
+  box-shadow: none !important;
+  color: #ffd700 !important;
+  text-shadow: none !important;
+  -webkit-text-stroke: 1.8px #000000;
+  paint-order: stroke fill;
 }
 
 /* Floating Player Control Trigger Button (Top Right of Player) */
