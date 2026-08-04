@@ -26,6 +26,7 @@
   // State
   const state = {
     enabled: true,
+    furigana: true,
     secondaryTrackId: null,
     tracks: [],
     cuesMap: new Map(),
@@ -39,8 +40,9 @@
 
   // Load saved preferences
   if (chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get(['nds_enabled', 'nds_fontSize', 'nds_position', 'nds_textStyle', 'nds_secondaryTrackId'], (res) => {
+    chrome.storage.sync.get(['nds_enabled', 'nds_furigana', 'nds_fontSize', 'nds_position', 'nds_textStyle', 'nds_secondaryTrackId'], (res) => {
       if (res.nds_enabled !== undefined) state.enabled = res.nds_enabled;
+      if (res.nds_furigana !== undefined) state.furigana = res.nds_furigana;
       if (res.nds_fontSize) state.fontSize = res.nds_fontSize;
       if (res.nds_position) state.position = res.nds_position;
       if (res.nds_textStyle) state.textStyle = res.nds_textStyle;
@@ -53,6 +55,7 @@
     if (chrome.storage && chrome.storage.sync) {
       chrome.storage.sync.set({
         nds_enabled: state.enabled,
+        nds_furigana: state.furigana,
         nds_fontSize: state.fontSize,
         nds_position: state.position,
         nds_textStyle: state.textStyle,
@@ -121,23 +124,49 @@
 
   // Render Subtitles
   function renderSecondaryCues(currentTime) {
-    if (!state.enabled || !state.activeCues || state.activeCues.length === 0) {
-      if (cueBoxEl) cueBoxEl.style.display = 'none';
-      return;
-    }
-
-    const matchingCues = state.activeCues.filter(c => currentTime >= c.start && currentTime <= c.end);
-
-    if (matchingCues.length > 0) {
-      const combinedText = matchingCues.map(c => c.text).join('\n');
-      if (cueBoxEl) {
-        cueBoxEl.innerText = combinedText;
-        cueBoxEl.style.display = 'inline-block';
+    try {
+      if (!state.enabled) {
+        if (cueBoxEl) cueBoxEl.style.display = 'none';
+        return;
       }
-    } else {
-      if (cueBoxEl) {
-        cueBoxEl.style.display = 'none';
+
+      // Check if activeCues need fallback from cuesMap
+      if (!state.activeCues || state.activeCues.length === 0) {
+        if (state.secondaryTrackId && state.cuesMap.has(state.secondaryTrackId)) {
+          state.activeCues = state.cuesMap.get(state.secondaryTrackId);
+        } else if (state.cuesMap.size > 0) {
+          state.activeCues = Array.from(state.cuesMap.values())[0];
+        }
       }
+
+      if (!state.activeCues || state.activeCues.length === 0) {
+        if (cueBoxEl) cueBoxEl.style.display = 'none';
+        return;
+      }
+
+      const matchingCues = state.activeCues.filter(c => currentTime >= c.start && currentTime <= c.end);
+
+      if (matchingCues.length > 0) {
+        const rawText = matchingCues.map(c => c.text).join('\n');
+        if (cueBoxEl) {
+          try {
+            if (state.furigana && window.NetflixDualSubsFurigana && window.NetflixDualSubsFurigana.isJapanese(rawText)) {
+              cueBoxEl.innerHTML = window.NetflixDualSubsFurigana.toFurigana(rawText);
+            } else {
+              cueBoxEl.innerText = rawText;
+            }
+          } catch (err) {
+            cueBoxEl.innerText = rawText;
+          }
+          cueBoxEl.style.display = 'inline-block';
+        }
+      } else {
+        if (cueBoxEl) {
+          cueBoxEl.style.display = 'none';
+        }
+      }
+    } catch (e) {
+      console.error('[Netflix Dual Subtitles] Render error:', e);
     }
   }
 
@@ -231,6 +260,14 @@
         </select>
       </div>
 
+      <div class="nds-field-group nds-switch-row">
+        <span class="nds-label" style="margin:0;">Japanese Furigana (ふりがな)</span>
+        <label class="nds-toggle">
+          <input type="checkbox" id="nds-toggle-furigana" ${state.furigana ? 'checked' : ''}>
+          <span class="nds-slider"></span>
+        </label>
+      </div>
+
       <div class="nds-field-group">
         <label class="nds-label">Position</label>
         <div class="nds-btn-group">
@@ -280,6 +317,14 @@
         state.enabled = e.target.checked;
         savePreferences();
         if (triggerBtnEl) triggerBtnEl.classList.toggle('active', state.enabled);
+      };
+    }
+
+    const furiganaCheckbox = document.getElementById('nds-toggle-furigana');
+    if (furiganaCheckbox) {
+      furiganaCheckbox.onchange = (e) => {
+        state.furigana = e.target.checked;
+        savePreferences();
       };
     }
 
@@ -419,11 +464,10 @@
       if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
       if (data.url) state.cuesMap.set(data.url, data.cues);
       
-      // If selected secondary language matches this captured track, activate cues immediately!
       if (state.secondaryTrackId && (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.bcp47 || state.secondaryTrackId === data.url)) {
         state.activeCues = data.cues;
-        console.log('[Netflix Dual Subtitles] Successfully activated secondary cues for selected language!');
-      } else if (!state.secondaryTrackId && (!state.activeCues || state.activeCues.length === 0)) {
+        console.log('[Netflix Dual Subtitles] Activated secondary cues for selected language!');
+      } else if (!state.secondaryTrackId || !state.activeCues || state.activeCues.length === 0) {
         state.activeCues = data.cues;
       }
       populateLanguageSelect();

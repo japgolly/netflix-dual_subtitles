@@ -42,11 +42,31 @@
   padding: 6px 16px;
   border-radius: 8px;
   color: #ffffff;
-  line-height: 1.35;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
   transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* Furigana Ruby Typography */
+.nds-cue-box ruby {
+  ruby-position: over;
+  display: inline-flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  vertical-align: bottom;
+  margin: 0 1px;
+}
+
+.nds-cue-box rt {
+  display: block;
+  font-size: 0.52em;
+  line-height: 1.1;
+  color: #ffeb3b; /* Vibrant yellow reading annotation */
+  font-weight: 700;
+  user-select: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
 /* Font Sizes */
