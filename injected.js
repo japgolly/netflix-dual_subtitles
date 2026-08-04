@@ -3,9 +3,20 @@
   if (window.__netflixDualSubsInjected) return;
   window.__netflixDualSubsInjected = true;
 
-  console.log('[Netflix Dual Subtitles] Main world script initialized');
+  const DEBUG = false;
+  const log = (...args) => DEBUG && console.log('[Netflix Dual Subtitles]', ...args);
+  const logError = (...args) => console.error('[Netflix Dual Subtitles]', ...args);
+
+  log('Main world script initialized');
 
   let pendingTrackId = null;
+  let lastSessionId = null;
+
+  const SUBTITLE_URL_PATTERNS = [/timedtext/i, /ttml/i, /dfxp/i, /vtt/i, /\/\?o=/i];
+
+  function isSubtitleUrl(url) {
+    return typeof url === 'string' && SUBTITLE_URL_PATTERNS.some(pattern => pattern.test(url));
+  }
 
   // Parse time helper (HH:MM:SS.mmm or seconds or ticks)
   function parseTime(timeStr) {
@@ -61,7 +72,7 @@
         }
       });
     } catch (e) {
-      console.error('[Netflix Dual Subtitles] Error parsing TTML:', e);
+      logError('Error parsing TTML:', e);
     }
     return cues;
   }
@@ -89,7 +100,7 @@
         }
       });
     } catch (e) {
-      console.error('[Netflix Dual Subtitles] Error parsing JSON Subtitles:', e);
+      logError('Error parsing JSON Subtitles:', e);
     }
     return cues;
   }
@@ -144,10 +155,16 @@
       if (!playerAPI) return null;
       const sessionIds = playerAPI.getAllPlayerSessionIds ? playerAPI.getAllPlayerSessionIds() : [];
       if (sessionIds.length > 0) {
-        return playerAPI.getVideoPlayerBySessionId(sessionIds[0]);
+        const currentSession = sessionIds[0];
+        if (lastSessionId && lastSessionId !== currentSession) {
+          log('Detected new player session ID:', currentSession);
+          window.postMessage({ type: 'NETFLIX_DUAL_SUB_EPISODE_RESET' }, '*');
+        }
+        lastSessionId = currentSession;
+        return playerAPI.getVideoPlayerBySessionId(currentSession);
       }
     } catch (e) {
-      console.error('[Netflix Dual Subtitles] Error accessing Netflix Player API:', e);
+      logError('Error accessing Netflix Player API:', e);
     }
     return null;
   }
@@ -181,7 +198,7 @@
     const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
     if (currentTrack) {
       return {
-        trackId: extractTrackId(currentTrack, 0),
+        trackId: pendingTrackId || extractTrackId(currentTrack, 0),
         bcp47: currentTrack.bcp47 || currentTrack.language || null
       };
     }
@@ -196,7 +213,7 @@
         const trackInfo = getCurrentActiveTrackInfo();
         const activeTrackId = pendingTrackId || trackInfo.trackId;
 
-        console.log(`[Netflix Dual Subtitles] Intercepted ${cues.length} cues for trackId: ${activeTrackId}`);
+        log(`Intercepted ${cues.length} cues for trackId: ${activeTrackId}, bcp47: ${trackInfo.bcp47}`);
 
         window.postMessage({
           type: 'NETFLIX_DUAL_SUB_CAPTURED',
@@ -207,7 +224,7 @@
         }, '*');
       }
     } catch (err) {
-      console.error('[Netflix Dual Subtitles] Subtitle processing error:', err);
+      logError('Subtitle processing error:', err);
     }
   }
 
@@ -221,7 +238,7 @@
 
   XMLHttpRequest.prototype.send = function () {
     this.addEventListener('load', function () {
-      if (this._url && (this._url.includes('timedtext') || this._url.includes('ttml') || this._url.includes('dfxp') || this._url.includes('vtt') || this._url.includes('/?o='))) {
+      if (isSubtitleUrl(this._url)) {
         handleInterceptedSubtitles(this.responseText, this._url);
       }
     });
@@ -233,7 +250,7 @@
     const response = await origFetch.apply(this, arguments);
     const url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url ? arguments[0].url : '');
     
-    if (url && (url.includes('timedtext') || url.includes('ttml') || url.includes('dfxp') || url.includes('vtt') || url.includes('/?o='))) {
+    if (isSubtitleUrl(url)) {
       try {
         const clone = response.clone();
         const text = await clone.text();
@@ -282,12 +299,16 @@
 
       try {
         const timedTextTracks = player.getTimedTextTrackList ? player.getTimedTextTrackList() : [];
-        const match = timedTextTracks.find((t, idx) => extractTrackId(t, idx) === targetTrackId);
+        const match = timedTextTracks.find((t, idx) => 
+          extractTrackId(t, idx) === targetTrackId || 
+          t.bcp47 === targetTrackId || 
+          t.language === targetTrackId
+        );
         if (match) {
           if (player.setTimedTextTrack) {
             const previousTrack = player.getTimedTextTrack();
             pendingTrackId = targetTrackId;
-            console.log('[Netflix Dual Subtitles] Requesting secondary track load for:', targetTrackId);
+            log('Requesting secondary track load for:', targetTrackId);
             
             player.setTimedTextTrack(match);
             
@@ -301,7 +322,7 @@
           }
         }
       } catch (err) {
-        console.error('[Netflix Dual Subtitles] Error setting secondary track:', err);
+        logError('Error setting secondary track:', err);
       }
     }
   });
