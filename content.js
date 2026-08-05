@@ -101,8 +101,21 @@
   // Auto-fetch saved secondary track when player is ready
   function checkAndAutoFetchSecondaryTrack() {
     if (!state.secondaryTrackId && !state.secondaryLanguageCode) return;
-    if (autoFetchedSecondary) return;
     if (!state.tracks || state.tracks.length === 0) return;
+
+    // Check if we already have cues in memory for the secondary track
+    if (state.secondaryLanguageCode && state.cuesMap.has(state.secondaryLanguageCode)) {
+      state.activeCues = state.cuesMap.get(state.secondaryLanguageCode);
+      autoFetchedSecondary = true;
+      return;
+    }
+    if (state.secondaryTrackId && state.cuesMap.has(state.secondaryTrackId)) {
+      state.activeCues = state.cuesMap.get(state.secondaryTrackId);
+      autoFetchedSecondary = true;
+      return;
+    }
+
+    if (autoFetchedSecondary) return;
 
     const match = state.tracks.find(t => 
       (state.secondaryLanguageCode && (t.bcp47 === state.secondaryLanguageCode || t.language === state.secondaryLanguageCode)) ||
@@ -114,20 +127,21 @@
 
     if (match) {
       const targetId = match.id;
-      const targetLang = match.bcp47 || match.language;
+      autoFetchedSecondary = true;
+      log('Auto-requesting saved secondary track on page load / episode transition:', targetId);
+      window.postMessage({
+        type: 'NETFLIX_DUAL_SUB_FETCH_TRACK',
+        trackId: targetId
+      }, '*');
 
-      if (state.cuesMap.has(targetId) || (targetLang && state.cuesMap.has(targetLang))) {
-        state.activeCues = state.cuesMap.get(targetLang) || state.cuesMap.get(targetId);
-        autoFetchedSecondary = true;
-        log('Auto-restored saved secondary cues for targetId:', targetId);
-      } else {
-        autoFetchedSecondary = true;
-        log('Auto-requesting saved secondary track on page load / episode transition:', targetId);
-        window.postMessage({
-          type: 'NETFLIX_DUAL_SUB_FETCH_TRACK',
-          trackId: targetId
-        }, '*');
-      }
+      // Retry after 2.5s if cues still haven't arrived
+      setTimeout(() => {
+        const lang = state.secondaryLanguageCode;
+        if ((!lang || !state.cuesMap.has(lang)) && !state.cuesMap.has(targetId)) {
+          log('Cues not arrived yet, resetting autoFetchedSecondary for retry');
+          autoFetchedSecondary = false;
+        }
+      }, 2500);
     }
   }
 
@@ -531,6 +545,7 @@
     if (data.type === 'NETFLIX_DUAL_SUB_EPISODE_RESET') {
       log('Received episode reset signal from injected.js');
       resetEpisodeCues();
+      checkAndAutoFetchSecondaryTrack();
     }
 
     if (data.type === 'NETFLIX_DUAL_SUB_CAPTURED') {
@@ -540,7 +555,6 @@
       if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
       if (data.url) state.cuesMap.set(data.url, data.cues);
       
-      // If secondaryLanguageCode or secondaryTrackId is selected, activate cues immediately
       if (state.secondaryLanguageCode && data.bcp47 === state.secondaryLanguageCode) {
         state.activeCues = data.cues;
         log('Activated secondary cues for language code:', state.secondaryLanguageCode);
@@ -570,6 +584,7 @@
     createOverlay();
     createUI();
     createTriggerButton();
+    checkAndAutoFetchSecondaryTrack();
   }, 800);
 
   startSyncLoop();

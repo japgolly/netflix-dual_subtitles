@@ -10,6 +10,7 @@
   log('Main world script initialized');
 
   let pendingTrackId = null;
+  let pendingTrackBcp47 = null;
   let lastSessionId = null;
 
   const SUBTITLE_URL_PATTERNS = [/timedtext/i, /ttml/i, /dfxp/i, /vtt/i, /\/\?o=/i];
@@ -192,17 +193,20 @@
   }
 
   function getCurrentActiveTrackInfo() {
-    const player = getNetflixPlayer();
-    if (!player) return { trackId: pendingTrackId, bcp47: null };
-
-    const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
-    if (currentTrack) {
-      return {
-        trackId: pendingTrackId || extractTrackId(currentTrack, 0),
-        bcp47: currentTrack.bcp47 || currentTrack.language || null
-      };
+    if (pendingTrackId) {
+      return { trackId: pendingTrackId, bcp47: pendingTrackBcp47 };
     }
-    return { trackId: pendingTrackId, bcp47: null };
+    const player = getNetflixPlayer();
+    if (player) {
+      const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
+      if (currentTrack) {
+        return {
+          trackId: extractTrackId(currentTrack, 0),
+          bcp47: currentTrack.bcp47 || currentTrack.language || null
+        };
+      }
+    }
+    return { trackId: null, bcp47: null };
   }
 
   // Intercept Network Requests (XHR & Fetch)
@@ -211,7 +215,7 @@
       const cues = parseSubtitlePayload(responseText, url);
       if (cues.length > 0) {
         const trackInfo = getCurrentActiveTrackInfo();
-        const activeTrackId = pendingTrackId || trackInfo.trackId;
+        const activeTrackId = trackInfo.trackId;
 
         log(`Intercepted ${cues.length} cues for trackId: ${activeTrackId}, bcp47: ${trackInfo.bcp47}`);
 
@@ -286,7 +290,7 @@
         currentPrimaryTrackId: primaryId
       }, '*');
     } catch (err) {}
-  }, 1500);
+  }, 1200);
 
   // Listen for requests from content.js to select secondary track via Netflix player API
   window.addEventListener('message', (event) => {
@@ -308,7 +312,8 @@
           if (player.setTimedTextTrack) {
             const previousTrack = player.getTimedTextTrack();
             pendingTrackId = targetTrackId;
-            log('Requesting secondary track load for:', targetTrackId);
+            pendingTrackBcp47 = match.bcp47 || match.language || targetTrackId;
+            log('Requesting secondary track load for:', targetTrackId, 'bcp47:', pendingTrackBcp47);
             
             player.setTimedTextTrack(match);
             
@@ -318,7 +323,8 @@
                 player.setTimedTextTrack(previousTrack);
               }
               pendingTrackId = null;
-            }, 800);
+              pendingTrackBcp47 = null;
+            }, 1000);
           }
         }
       } catch (err) {
