@@ -1,47 +1,44 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 describe('Internationalized Language Label Formatter', () => {
   let formatLanguageLabel;
 
   beforeAll(() => {
-    let languageNames = null;
-    try {
-      languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
-    } catch (e) {}
-
-    formatLanguageLabel = function (rawLabel, bcp47Code) {
-      if (rawLabel && rawLabel !== 'undefined' && !rawLabel.startsWith('undefined') && rawLabel !== 'unk') {
-        return rawLabel;
+    // Mock Chrome extension API in jsdom environment
+    global.chrome = {
+      runtime: {
+        getURL: (relPath) => path.resolve(__dirname, '../' + relPath)
+      },
+      storage: {
+        sync: {
+          get: (keys, cb) => cb({}),
+          set: () => {}
+        }
       }
-
-      if (bcp47Code && bcp47Code !== 'undefined' && bcp47Code !== 'unk') {
-        try {
-          if (languageNames) {
-            const cleanCode = bcp47Code.split('-')[0];
-            const formatted = languageNames.of(cleanCode);
-            if (formatted) return formatted;
-          }
-        } catch (e) {}
-        return bcp47Code.toUpperCase();
-      }
-
-      return 'Subtitle Track';
     };
+
+    // Load content.js directly into window context (testing exact production code)
+    const code = fs.readFileSync(path.resolve(__dirname, '../content.js'), 'utf8');
+    eval(code);
+
+    formatLanguageLabel = window.__netflixDualSubsContentUtils.formatLanguageLabel;
   });
 
-  it('should preserve valid raw labels', () => {
+  it('should preserve valid raw labels from content.js', () => {
     expect(formatLanguageLabel('Japanese [CC]', 'ja')).toBe('Japanese [CC]');
     expect(formatLanguageLabel('English [Original]', 'en')).toBe('English [Original]');
   });
 
-  it('should format BCP-47 codes when raw label is undefined or unk', () => {
+  it('should format BCP-47 codes directly from content.js when raw label is undefined or unk', () => {
     expect(formatLanguageLabel('undefined', 'ja')).toBe('Japanese');
     expect(formatLanguageLabel('unk', 'es')).toBe('Spanish');
     expect(formatLanguageLabel(null, 'fr-FR')).toBe('French');
     expect(formatLanguageLabel('undefined', 'zh-Hans')).toBe('Chinese');
   });
 
-  it('should return fallback title when both raw label and BCP-47 are missing', () => {
+  it('should return fallback title directly from content.js when both raw label and BCP-47 are missing', () => {
     expect(formatLanguageLabel(null, null)).toBe('Subtitle Track');
     expect(formatLanguageLabel('undefined', 'unk')).toBe('Subtitle Track');
   });

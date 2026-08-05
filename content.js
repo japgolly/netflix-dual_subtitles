@@ -7,18 +7,6 @@
 
   log('Content script loaded');
 
-  // Inject main world script (injected.js)
-  function injectMainWorldScript() {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('injected.js');
-    script.onload = function () {
-      this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-  }
-
-  injectMainWorldScript();
-
   // DOM Selectors Registry
   const SELECTORS = {
     playerContainers: [
@@ -31,16 +19,7 @@
     video: 'video'
   };
 
-  // Helper to find the active Netflix player container
-  function getPlayerContainer() {
-    for (const selector of SELECTORS.playerContainers) {
-      const el = document.querySelector(selector);
-      if (el) return el;
-    }
-    return document.body;
-  }
-
-  // State
+  // State & DOM Variables
   const state = {
     enabled: true,
     furigana: true,
@@ -57,7 +36,36 @@
   };
 
   let autoFetchedSecondary = false;
-  let currentWatchUrl = window.location.href;
+  let currentWatchUrl = typeof window !== 'undefined' ? window.location.href : '';
+  let rootEl = null;
+  let overlayEl = null;
+  let cueBoxEl = null;
+  let panelEl = null;
+  let triggerBtnEl = null;
+  let videoEl = null;
+  let animFrameId = null;
+
+  // Inject main world script (injected.js)
+  function injectMainWorldScript() {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('injected.js');
+    script.onload = function () {
+      this.remove();
+    };
+    (document.head || document.documentElement).appendChild(script);
+  }
+
+  injectMainWorldScript();
+
+  // Helper to find the active Netflix player container
+  function getPlayerContainer() {
+    for (const selector of SELECTORS.playerContainers) {
+      const el = document.querySelector(selector);
+      if (el) return el;
+    }
+    return document.body;
+  }
 
   // Reset cues and state for new episode
   function resetEpisodeCues() {
@@ -69,8 +77,9 @@
   }
 
   // Load saved preferences
-  if (chrome.storage && chrome.storage.sync) {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get(['nds_enabled', 'nds_furigana', 'nds_fontSize', 'nds_position', 'nds_textStyle', 'nds_secondaryTrackId', 'nds_secondaryLanguageCode'], (res) => {
+      if (!res) return;
       if (res.nds_enabled !== undefined) state.enabled = res.nds_enabled;
       if (res.nds_furigana !== undefined) state.furigana = res.nds_furigana;
       if (res.nds_fontSize) state.fontSize = res.nds_fontSize;
@@ -85,7 +94,7 @@
   }
 
   function savePreferences() {
-    if (chrome.storage && chrome.storage.sync) {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
       chrome.storage.sync.set({
         nds_enabled: state.enabled,
         nds_furigana: state.furigana,
@@ -144,15 +153,6 @@
       }, 2500);
     }
   }
-
-  // DOM Elements
-  let rootEl = null;
-  let overlayEl = null;
-  let cueBoxEl = null;
-  let panelEl = null;
-  let triggerBtnEl = null;
-  let videoEl = null;
-  let animFrameId = null;
 
   // Build / Ensure Root Host
   function ensureRootHost() {
@@ -286,7 +286,9 @@
   // Language Display Formatting
   let languageNames = null;
   try {
-    languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+    if (typeof Intl !== 'undefined' && Intl.DisplayNames) {
+      languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+    }
   } catch (e) {}
 
   function formatLanguageLabel(rawLabel, bcp47Code) {
@@ -510,83 +512,90 @@
     });
   }
 
-  window.addEventListener('click', (e) => {
-    const targetBtn = e.target.closest('#nds-trigger-btn') || e.target.closest('.nds-trigger-btn');
-    if (targetBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      log('Trigger button clicked via global capture handler');
-      setPanelVisibility();
-    }
-  }, true);
-
-  window.addEventListener('pointerdown', (e) => {
-    const targetBtn = e.target.closest('#nds-trigger-btn') || e.target.closest('.nds-trigger-btn');
-    if (targetBtn) {
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-    }
-  }, true);
-
-  window.addEventListener('keydown', (e) => {
-    if (e.altKey && (e.key === 's' || e.key === 'S' || e.code === 'KeyS')) {
-      e.preventDefault();
-      log('Alt+S shortcut pressed');
-      setPanelVisibility();
-    }
-  });
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window || !event.data) return;
-
-    const data = event.data;
-
-    if (data.type === 'NETFLIX_DUAL_SUB_EPISODE_RESET') {
-      log('Received episode reset signal from injected.js');
-      resetEpisodeCues();
-      checkAndAutoFetchSecondaryTrack();
-    }
-
-    if (data.type === 'NETFLIX_DUAL_SUB_CAPTURED') {
-      log(`Captured ${data.cues.length} cues for trackId: ${data.trackId}, bcp47: ${data.bcp47}`);
-
-      if (data.trackId) state.cuesMap.set(data.trackId, data.cues);
-      if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
-      if (data.url) state.cuesMap.set(data.url, data.cues);
-      
-      if (state.secondaryLanguageCode && data.bcp47 === state.secondaryLanguageCode) {
-        state.activeCues = data.cues;
-        log('Activated secondary cues for language code:', state.secondaryLanguageCode);
-      } else if (state.secondaryTrackId && (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.url)) {
-        state.activeCues = data.cues;
-        log('Activated secondary cues for trackId:', state.secondaryTrackId);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('click', (e) => {
+      const targetBtn = e.target.closest('#nds-trigger-btn') || e.target.closest('.nds-trigger-btn');
+      if (targetBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        log('Trigger button clicked via global capture handler');
+        setPanelVisibility();
       }
-      populateLanguageSelect();
-    }
+    }, true);
 
-    if (data.type === 'NETFLIX_DUAL_SUB_PLAYER_STATE') {
-      if (data.tracks) {
-        state.tracks = data.tracks;
-        state.currentPrimaryTrackId = data.currentPrimaryTrackId;
-        populateLanguageSelect();
+    window.addEventListener('pointerdown', (e) => {
+      const targetBtn = e.target.closest('#nds-trigger-btn') || e.target.closest('.nds-trigger-btn');
+      if (targetBtn) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    }, true);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 's' || e.key === 'S' || e.code === 'KeyS')) {
+        e.preventDefault();
+        log('Alt+S shortcut pressed');
+        setPanelVisibility();
+      }
+    });
+
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || !event.data) return;
+
+      const data = event.data;
+
+      if (data.type === 'NETFLIX_DUAL_SUB_EPISODE_RESET') {
+        log('Received episode reset signal from injected.js');
+        resetEpisodeCues();
         checkAndAutoFetchSecondaryTrack();
       }
-    }
-  });
 
-  setInterval(() => {
-    if (window.location.href !== currentWatchUrl) {
-      currentWatchUrl = window.location.href;
-      log('SPA Navigation detected! Resetting episode cues for new URL:', currentWatchUrl);
-      resetEpisodeCues();
-    }
-    createOverlay();
-    createUI();
-    createTriggerButton();
-    checkAndAutoFetchSecondaryTrack();
-  }, 800);
+      if (data.type === 'NETFLIX_DUAL_SUB_CAPTURED') {
+        log(`Captured ${data.cues.length} cues for trackId: ${data.trackId}, bcp47: ${data.bcp47}`);
 
-  startSyncLoop();
+        if (data.trackId) state.cuesMap.set(data.trackId, data.cues);
+        if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
+        if (data.url) state.cuesMap.set(data.url, data.cues);
+        
+        if (state.secondaryLanguageCode && data.bcp47 === state.secondaryLanguageCode) {
+          state.activeCues = data.cues;
+          log('Activated secondary cues for language code:', state.secondaryLanguageCode);
+        } else if (state.secondaryTrackId && (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.url)) {
+          state.activeCues = data.cues;
+          log('Activated secondary cues for trackId:', state.secondaryTrackId);
+        }
+        populateLanguageSelect();
+      }
+
+      if (data.type === 'NETFLIX_DUAL_SUB_PLAYER_STATE') {
+        if (data.tracks) {
+          state.tracks = data.tracks;
+          state.currentPrimaryTrackId = data.currentPrimaryTrackId;
+          populateLanguageSelect();
+          checkAndAutoFetchSecondaryTrack();
+        }
+      }
+    });
+
+    setInterval(() => {
+      if (window.location.href !== currentWatchUrl) {
+        currentWatchUrl = window.location.href;
+        log('SPA Navigation detected! Resetting episode cues for new URL:', currentWatchUrl);
+        resetEpisodeCues();
+      }
+      createOverlay();
+      createUI();
+      createTriggerButton();
+      checkAndAutoFetchSecondaryTrack();
+    }, 800);
+
+    startSyncLoop();
+  }
+
+  // Export utilities for testing
+  window.__netflixDualSubsContentUtils = {
+    formatLanguageLabel: formatLanguageLabel
+  };
 
 })();
