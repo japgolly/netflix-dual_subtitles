@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 describe('Subtitle Payload & Timestamp Parsers', () => {
-  let parseTime, parseTTML, parseJSONTimedText, parseVTT, isSubtitleUrl;
+  let parseTime, parseTTML, parseJSONTimedText, parseVTT, isSubtitleUrl, extractResponseText;
 
   beforeAll(() => {
     // Load injected.js directly into window context (testing exact production code)
@@ -16,6 +16,7 @@ describe('Subtitle Payload & Timestamp Parsers', () => {
     parseJSONTimedText = utils.parseJSONTimedText;
     parseVTT = utils.parseVTT;
     isSubtitleUrl = utils.isSubtitleUrl;
+    extractResponseText = utils.extractResponseText;
   });
 
   describe('Subtitle URL Matcher (isSubtitleUrl)', () => {
@@ -24,6 +25,20 @@ describe('Subtitle Payload & Timestamp Parsers', () => {
       expect(isSubtitleUrl('https://example.com/subtitles.vtt')).toBe(true);
       expect(isSubtitleUrl('https://example.com/subtitles.ttml')).toBe(true);
       expect(isSubtitleUrl('https://example.com/video.mp4')).toBe(false);
+    });
+  });
+
+  describe('XHR Response Extraction (extractResponseText)', () => {
+    it('should handle text responseType', () => {
+      const xhr = { responseType: 'text', responseText: 'sample text' };
+      expect(extractResponseText(xhr)).toBe('sample text');
+    });
+
+    it('should handle arraybuffer responseType without throwing InvalidStateError', () => {
+      const encoder = new TextEncoder();
+      const buf = encoder.encode('binary text').buffer;
+      const xhr = { responseType: 'arraybuffer', response: buf };
+      expect(extractResponseText(xhr)).toBe('binary text');
     });
   });
 

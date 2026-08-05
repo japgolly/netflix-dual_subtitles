@@ -19,6 +19,37 @@
     return typeof url === 'string' && SUBTITLE_URL_PATTERNS.some(pattern => pattern.test(url));
   }
 
+  // Safe property evaluation wrapper to guard against internal Netflix XHR getters
+  function safeGet(fn, fallback = null) {
+    try {
+      const val = fn();
+      return (val !== undefined && val !== null) ? val : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  // Safely extract text content from XMLHttpRequest regardless of responseType
+  function extractResponseText(xhr) {
+    try {
+      if (!xhr.responseType || xhr.responseType === '' || xhr.responseType === 'text') {
+        return xhr.responseText || '';
+      }
+      if (xhr.responseType === 'arraybuffer' && xhr.response) {
+        return new TextDecoder('utf-8').decode(xhr.response);
+      }
+      if (xhr.responseType === 'json' && xhr.response) {
+        return typeof xhr.response === 'string' ? xhr.response : JSON.stringify(xhr.response);
+      }
+      if (xhr.response) {
+        if (typeof xhr.response === 'string') return xhr.response;
+      }
+    } catch (e) {
+      logError('Error extracting response text from XHR:', e);
+    }
+    return '';
+  }
+
   // Parse time helper (HH:MM:SS.mmm or MM:SS.mmm or seconds or ticks)
   function parseTime(timeStr) {
     if (typeof timeStr === 'number') return timeStr / 1000;
@@ -137,7 +168,10 @@
 
   function parseSubtitlePayload(responseText, url) {
     let cues = [];
-    if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+    if (typeof responseText !== 'string') return cues;
+
+    const trimmed = responseText.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
       try {
         const json = JSON.parse(responseText);
         cues = parseJSONTimedText(json);
@@ -152,17 +186,41 @@
 
   function getNetflixPlayer() {
     try {
-      const playerAPI = window.netflix && window.netflix.appContext && window.netflix.appContext.state && window.netflix.appContext.state.playerApp && window.netflix.appContext.state.playerApp.getAPI && window.netflix.appContext.state.playerApp.getAPI().videoPlayer;
+      if (!window.netflix || !window.netflix.appContext || !window.netflix.appContext.state) return null;
+      const playerApp = window.netflix.appContext.state.playerApp;
+      if (!playerApp || typeof playerApp.getAPI !== 'function') return null;
+
+      let playerAPI = null;
+      try {
+        const api = playerApp.getAPI();
+        playerAPI = api ? api.videoPlayer : null;
+      } catch (e) {
+        return null;
+      }
       if (!playerAPI) return null;
-      const sessionIds = playerAPI.getAllPlayerSessionIds ? playerAPI.getAllPlayerSessionIds() : [];
-      if (sessionIds.length > 0) {
+
+      let sessionIds = [];
+      try {
+        sessionIds = playerAPI.getAllPlayerSessionIds ? playerAPI.getAllPlayerSessionIds() : [];
+      } catch (e) {
+        return null;
+      }
+
+      if (sessionIds && sessionIds.length > 0) {
         const currentSession = sessionIds[0];
         if (lastSessionId && lastSessionId !== currentSession) {
           log('Detected new player session ID:', currentSession);
-          window.postMessage({ type: 'NETFLIX_DUAL_SUB_EPISODE_RESET' }, '*');
+          try {
+            window.postMessage({ type: 'NETFLIX_DUAL_SUB_EPISODE_RESET' }, '*');
+          } catch (e) {}
         }
         lastSessionId = currentSession;
-        return playerAPI.getVideoPlayerBySessionId(currentSession);
+
+        try {
+          return playerAPI.getVideoPlayerBySessionId(currentSession);
+        } catch (e) {
+          return null;
+        }
       }
     } catch (e) {
       logError('Error accessing Netflix Player API:', e);
@@ -174,56 +232,89 @@
     if (!t) return `Track ${index + 1}`;
     if (typeof t === 'string') return t;
     
-    return t.languageDescription || 
-           t.displayName || 
-           t.label || 
-           t.language || 
-           t.name || 
-           t.bcp47 || 
-           (t.rawTrack && (t.rawTrack.languageDescription || t.rawTrack.displayName || t.rawTrack.label || t.rawTrack.bcp47)) ||
-           t.id || 
-           t.trackId || 
-           `Track ${index + 1}`;
+    try { if (t.languageDescription) return String(t.languageDescription); } catch (e) {}
+    try { if (t.displayName) return String(t.displayName); } catch (e) {}
+    try { if (t.label) return String(t.label); } catch (e) {}
+    try { if (t.language) return String(t.language); } catch (e) {}
+    try { if (t.name) return String(t.name); } catch (e) {}
+    try { if (t.bcp47) return String(t.bcp47); } catch (e) {}
+    try { if (t.id) return String(t.id); } catch (e) {}
+    try { if (t.trackId) return String(t.trackId); } catch (e) {}
+
+    return `Track ${index + 1}`;
   }
 
   function extractTrackId(t, index) {
     if (!t) return `track_${index}`;
     if (typeof t === 'string') return t;
-    return t.id || t.trackId || t.bcp47 || extractTrackLabel(t, index);
+
+    try { if (typeof t.id === 'string' && t.id) return t.id; } catch (e) {}
+    try { if (typeof t.trackId === 'string' && t.trackId) return t.trackId; } catch (e) {}
+    try { if (typeof t.bcp47 === 'string' && t.bcp47) return t.bcp47; } catch (e) {}
+
+    try {
+      return extractTrackLabel(t, index);
+    } catch (e) {
+      return `track_${index}`;
+    }
   }
 
   function getCurrentActiveTrackInfo() {
     if (pendingTrackId) {
-      return { trackId: pendingTrackId, bcp47: pendingTrackBcp47 };
+      return { 
+        trackId: String(pendingTrackId), 
+        bcp47: pendingTrackBcp47 ? String(pendingTrackBcp47) : null 
+      };
     }
-    const player = getNetflixPlayer();
-    if (player) {
-      const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
-      if (currentTrack) {
-        return {
-          trackId: extractTrackId(currentTrack, 0),
-          bcp47: currentTrack.bcp47 || currentTrack.language || null
-        };
+    try {
+      let player = null;
+      try { player = getNetflixPlayer(); } catch (e) {}
+
+      if (player) {
+        let currentTrack = null;
+        try {
+          currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
+        } catch (e) {}
+
+        if (currentTrack) {
+          let trackId = null;
+          let bcp47 = null;
+
+          try { trackId = extractTrackId(currentTrack, 0); } catch (e) {}
+          try { bcp47 = currentTrack.bcp47 || currentTrack.language; } catch (e) {}
+
+          return { 
+            trackId: trackId ? String(trackId) : 'current_track', 
+            bcp47: bcp47 ? String(bcp47) : null 
+          };
+        }
       }
+    } catch (e) {
+      logError('Error in getCurrentActiveTrackInfo:', e);
     }
-    return { trackId: null, bcp47: null };
+    return { trackId: 'current_track', bcp47: null };
   }
 
   // Intercept Network Requests (XHR & Fetch)
   function handleInterceptedSubtitles(responseText, url) {
     try {
       const cues = parseSubtitlePayload(responseText, url);
-      if (cues.length > 0) {
-        const trackInfo = getCurrentActiveTrackInfo();
-        const activeTrackId = trackInfo.trackId;
+      if (cues && cues.length > 0) {
+        let trackInfo = { trackId: 'captured_track', bcp47: null };
+        try {
+          trackInfo = getCurrentActiveTrackInfo();
+        } catch (e) {}
 
-        log(`Intercepted ${cues.length} cues for trackId: ${activeTrackId}, bcp47: ${trackInfo.bcp47}`);
+        const activeTrackId = trackInfo.trackId || pendingTrackId || 'captured_track';
+        const activeBcp47 = trackInfo.bcp47 || pendingTrackBcp47 || null;
+
+        log(`Intercepted ${cues.length} cues for trackId: ${activeTrackId}, bcp47: ${activeBcp47}`);
 
         window.postMessage({
           type: 'NETFLIX_DUAL_SUB_CAPTURED',
-          url: url,
-          trackId: activeTrackId,
-          bcp47: trackInfo.bcp47,
+          url: String(url || ''),
+          trackId: String(activeTrackId),
+          bcp47: activeBcp47 ? String(activeBcp47) : null,
           cues: cues
         }, '*');
       }
@@ -243,7 +334,10 @@
   XMLHttpRequest.prototype.send = function () {
     this.addEventListener('load', function () {
       if (isSubtitleUrl(this._url)) {
-        handleInterceptedSubtitles(this.responseText, this._url);
+        const responseText = extractResponseText(this);
+        if (responseText) {
+          handleInterceptedSubtitles(responseText, this._url);
+        }
       }
     });
     return origSend.apply(this, arguments);
@@ -266,20 +360,21 @@
 
   // Periodic poll to check player status and inform content script
   setInterval(() => {
-    const player = getNetflixPlayer();
-    if (!player) return;
-
     try {
-      const timedTextTracks = player.getTimedTextTrackList ? player.getTimedTextTrackList() : [];
-      const currentTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
+      let player = null;
+      try { player = getNetflixPlayer(); } catch (e) {}
+      if (!player) return;
+
+      const timedTextTracks = safeGet(() => player.getTimedTextTrackList ? player.getTimedTextTrackList() : [], []);
+      const currentTrack = safeGet(() => player.getTimedTextTrack ? player.getTimedTextTrack() : null, null);
 
       const tracks = timedTextTracks.map((t, idx) => ({
-        id: extractTrackId(t, idx),
-        language: t.language || t.bcp47 || 'unk',
-        label: extractTrackLabel(t, idx),
-        bcp47: t.bcp47 || t.language || 'unk',
-        isNone: t.rawTrack ? (t.rawTrack.isNone || t.rawTrack.trackType === 'OFF') : (t.isOff || false),
-        raw: t
+        id: String(extractTrackId(t, idx)),
+        language: safeGet(() => t.language || t.bcp47, 'unk'),
+        label: String(extractTrackLabel(t, idx)),
+        bcp47: safeGet(() => t.bcp47 || t.language, 'unk'),
+        isNone: safeGet(() => t.rawTrack ? (t.rawTrack.isNone || t.rawTrack.trackType === 'OFF') : (t.isOff || false), false),
+        raw: null
       }));
 
       const primaryId = currentTrack ? extractTrackId(currentTrack, 0) : null;
@@ -287,7 +382,7 @@
       window.postMessage({
         type: 'NETFLIX_DUAL_SUB_PLAYER_STATE',
         tracks: tracks,
-        currentPrimaryTrackId: primaryId
+        currentPrimaryTrackId: primaryId ? String(primaryId) : null
       }, '*');
     } catch (err) {}
   }, 1200);
@@ -298,21 +393,22 @@
 
     if (event.data.type === 'NETFLIX_DUAL_SUB_FETCH_TRACK') {
       const targetTrackId = event.data.trackId;
-      const player = getNetflixPlayer();
+      let player = null;
+      try { player = getNetflixPlayer(); } catch (e) {}
       if (!player) return;
 
       try {
-        const timedTextTracks = player.getTimedTextTrackList ? player.getTimedTextTrackList() : [];
+        const timedTextTracks = safeGet(() => player.getTimedTextTrackList ? player.getTimedTextTrackList() : [], []);
         const match = timedTextTracks.find((t, idx) => 
           extractTrackId(t, idx) === targetTrackId || 
-          t.bcp47 === targetTrackId || 
-          t.language === targetTrackId
+          safeGet(() => t.bcp47) === targetTrackId || 
+          safeGet(() => t.language) === targetTrackId
         );
         if (match) {
           if (player.setTimedTextTrack) {
-            const previousTrack = player.getTimedTextTrack();
+            const previousTrack = safeGet(() => player.getTimedTextTrack(), null);
             pendingTrackId = targetTrackId;
-            pendingTrackBcp47 = match.bcp47 || match.language || targetTrackId;
+            pendingTrackBcp47 = safeGet(() => match.bcp47 || match.language || targetTrackId, targetTrackId);
             log('Requesting secondary track load for:', targetTrackId, 'bcp47:', pendingTrackBcp47);
             
             player.setTimedTextTrack(match);
@@ -339,7 +435,9 @@
     parseTTML: parseTTML,
     parseJSONTimedText: parseJSONTimedText,
     parseVTT: parseVTT,
-    isSubtitleUrl: isSubtitleUrl
+    isSubtitleUrl: isSubtitleUrl,
+    extractResponseText: extractResponseText,
+    safeGet: safeGet
   };
 
 })();

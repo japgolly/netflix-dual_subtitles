@@ -45,6 +45,14 @@
   let videoEl = null;
   let animFrameId = null;
 
+  // Helper to compare language codes (e.g. "ja" vs "ja-JP")
+  function isLanguageMatch(lang1, lang2) {
+    if (!lang1 || !lang2) return false;
+    const c1 = lang1.toLowerCase().split('-')[0];
+    const c2 = lang2.toLowerCase().split('-')[0];
+    return c1 === c2;
+  }
+
   // Inject main world script (injected.js)
   function injectMainWorldScript() {
     if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
@@ -157,14 +165,18 @@
     if (!state.secondaryTrackId && !state.secondaryLanguageCode) return;
     if (!state.tracks || state.tracks.length === 0) return;
 
+    const baseLang = state.secondaryLanguageCode ? state.secondaryLanguageCode.split('-')[0] : null;
+
     // Check if we already have cues in memory for the secondary track
+    if (baseLang && state.cuesMap.has(baseLang)) {
+      autoFetchedSecondary = true;
+      return;
+    }
     if (state.secondaryLanguageCode && state.cuesMap.has(state.secondaryLanguageCode)) {
-      state.activeCues = state.cuesMap.get(state.secondaryLanguageCode);
       autoFetchedSecondary = true;
       return;
     }
     if (state.secondaryTrackId && state.cuesMap.has(state.secondaryTrackId)) {
-      state.activeCues = state.cuesMap.get(state.secondaryTrackId);
       autoFetchedSecondary = true;
       return;
     }
@@ -172,7 +184,7 @@
     if (autoFetchedSecondary) return;
 
     const match = state.tracks.find(t => 
-      (state.secondaryLanguageCode && (t.bcp47 === state.secondaryLanguageCode || t.language === state.secondaryLanguageCode)) ||
+      (state.secondaryLanguageCode && (isLanguageMatch(t.bcp47, state.secondaryLanguageCode) || isLanguageMatch(t.language, state.secondaryLanguageCode))) ||
       t.id === state.secondaryTrackId || 
       t.bcp47 === state.secondaryTrackId || 
       t.language === state.secondaryTrackId ||
@@ -190,8 +202,7 @@
 
       // Retry after 2.5s if cues still haven't arrived
       setTimeout(() => {
-        const lang = state.secondaryLanguageCode;
-        if ((!lang || !state.cuesMap.has(lang)) && !state.cuesMap.has(targetId)) {
+        if (baseLang && !state.cuesMap.has(baseLang) && !state.cuesMap.has(targetId)) {
           log('Cues not arrived yet, resetting autoFetchedSecondary for retry');
           autoFetchedSecondary = false;
         }
@@ -257,12 +268,14 @@
       }
 
       let cues = null;
-      if (state.secondaryLanguageCode && state.cuesMap.has(state.secondaryLanguageCode)) {
+      const baseLang = state.secondaryLanguageCode ? state.secondaryLanguageCode.split('-')[0] : null;
+
+      if (baseLang && state.cuesMap.has(baseLang)) {
+        cues = state.cuesMap.get(baseLang);
+      } else if (state.secondaryLanguageCode && state.cuesMap.has(state.secondaryLanguageCode)) {
         cues = state.cuesMap.get(state.secondaryLanguageCode);
       } else if (state.secondaryTrackId && state.cuesMap.has(state.secondaryTrackId)) {
         cues = state.cuesMap.get(state.secondaryTrackId);
-      } else if (state.activeCues && state.activeCues.length > 0) {
-        cues = state.activeCues;
       }
 
       if (!cues || cues.length === 0) {
@@ -468,12 +481,13 @@
         savePreferences();
 
         const targetLang = state.secondaryLanguageCode;
+        const baseLang = targetLang ? targetLang.split('-')[0] : null;
 
-        if (targetLang && state.cuesMap.has(targetLang)) {
-          state.activeCues = state.cuesMap.get(targetLang);
+        if (baseLang && state.cuesMap.has(baseLang)) {
+          log('Switched active cues to selected base language code:', baseLang);
+        } else if (targetLang && state.cuesMap.has(targetLang)) {
           log('Switched active cues to selected languageCode:', targetLang);
         } else if (state.cuesMap.has(selectedId)) {
-          state.activeCues = state.cuesMap.get(selectedId);
           log('Switched active cues to selected trackId:', selectedId);
         } else {
           log('Requesting fetch for secondary trackId:', selectedId);
@@ -539,7 +553,7 @@
       const opt = document.createElement('option');
       opt.value = trackId;
       opt.innerText = displayLabel + (isPrimary ? ' (Primary)' : '');
-      if (trackId === currentVal || (state.secondaryLanguageCode && (t.bcp47 === state.secondaryLanguageCode || t.language === state.secondaryLanguageCode))) {
+      if (trackId === currentVal || (state.secondaryLanguageCode && isLanguageMatch(t.bcp47 || t.language, state.secondaryLanguageCode))) {
         opt.selected = true;
       }
       langSelect.appendChild(opt);
@@ -600,16 +614,13 @@
         log(`Captured ${data.cues.length} cues for trackId: ${data.trackId}, bcp47: ${data.bcp47}`);
 
         if (data.trackId) state.cuesMap.set(data.trackId, data.cues);
-        if (data.bcp47) state.cuesMap.set(data.bcp47, data.cues);
+        if (data.bcp47) {
+          state.cuesMap.set(data.bcp47, data.cues);
+          const base = data.bcp47.split('-')[0];
+          state.cuesMap.set(base, data.cues);
+        }
         if (data.url) state.cuesMap.set(data.url, data.cues);
         
-        if (state.secondaryLanguageCode && data.bcp47 === state.secondaryLanguageCode) {
-          state.activeCues = data.cues;
-          log('Activated secondary cues for language code:', state.secondaryLanguageCode);
-        } else if (state.secondaryTrackId && (state.secondaryTrackId === data.trackId || state.secondaryTrackId === data.url)) {
-          state.activeCues = data.cues;
-          log('Activated secondary cues for trackId:', state.secondaryTrackId);
-        }
         populateLanguageSelect();
       }
 
