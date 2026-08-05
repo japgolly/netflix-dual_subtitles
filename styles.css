@@ -47,6 +47,7 @@
   padding: 6px 16px;
   border-radius: 8px;
   color: #ffffff;
+  font-weight: 700;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -93,7 +94,7 @@
   box-shadow: none !important;
   color: #ffd700 !important;
   text-shadow: none !important;
-  -webkit-text-stroke: 1.8px #000000;
+  -webkit-text-stroke: 2.4px #000000;
   paint-order: stroke fill;
 }
 
