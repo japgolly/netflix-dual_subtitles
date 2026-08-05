@@ -67,6 +67,51 @@
     return document.body;
   }
 
+  // Detect Netflix player control bar visibility
+  function checkPlayerControlsVisibility() {
+    if (!overlayEl) return;
+
+    let isVisible = false;
+
+    // Check 1: Netflix controls container & bottom bar elements
+    const controls = document.querySelector('.PlayerControlsNeo__bottom-controls') ||
+                     document.querySelector('[data-uia="controls-standard"]') ||
+                     document.querySelector('.PlayerControlsNeo__all-controls') || 
+                     document.querySelector('.controls');
+
+    if (controls) {
+      const style = window.getComputedStyle(controls);
+      if (style.opacity !== '0' && style.visibility !== 'hidden' && style.display !== 'none') {
+        isVisible = true;
+      }
+    }
+
+    // Check 2: Player wrapper active class
+    if (!isVisible) {
+      const watchVideo = getPlayerContainer();
+      if (watchVideo && (
+        watchVideo.classList.contains('active') || 
+        watchVideo.classList.contains('is-active') ||
+        watchVideo.classList.contains('controls-showing')
+      )) {
+        isVisible = true;
+      }
+    }
+
+    // Check 3: Check if native player-timedtext is shifted up
+    if (!isVisible) {
+      const nativeTimedText = document.querySelector('.player-timedtext') || document.querySelector('[data-uia="player-timedtext"]');
+      if (nativeTimedText) {
+        const bottomVal = parseFloat(window.getComputedStyle(nativeTimedText).bottom);
+        if (!isNaN(bottomVal) && bottomVal > 80) {
+          isVisible = true;
+        }
+      }
+    }
+
+    overlayEl.classList.toggle('controls-visible', isVisible);
+  }
+
   // Reset cues and state for new episode
   function resetEpisodeCues() {
     log('Resetting episode cues for new session / navigation');
@@ -588,7 +633,8 @@
       createUI();
       createTriggerButton();
       checkAndAutoFetchSecondaryTrack();
-    }, 800);
+      checkPlayerControlsVisibility();
+    }, 250);
 
     startSyncLoop();
   }

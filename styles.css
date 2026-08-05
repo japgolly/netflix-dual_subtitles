@@ -23,7 +23,7 @@
   z-index: 2147483646;
   pointer-events: none;
   user-select: none;
-  transition: bottom 0.2s ease, top 0.2s ease;
+  transition: bottom 0.25s ease-in-out, top 0.25s ease-in-out;
 }
 
 #netflix-dual-sub-overlay.position-top {
@@ -34,6 +34,11 @@
 #netflix-dual-sub-overlay.position-bottom {
   bottom: 20%;
   top: auto;
+}
+
+/* Shift bottom subtitles up when Netflix player controls are visible */
+#netflix-dual-sub-overlay.position-bottom.controls-visible {
+  bottom: 28%;
 }
 
 /* Secondary Subtitle Text Box */
