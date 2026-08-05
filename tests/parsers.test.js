@@ -3,99 +3,28 @@ import fs from 'fs';
 import path from 'path';
 
 describe('Subtitle Payload & Timestamp Parsers', () => {
-  let parseTime, parseTTML, parseJSONTimedText, parseVTT;
+  let parseTime, parseTTML, parseJSONTimedText, parseVTT, isSubtitleUrl;
 
   beforeAll(() => {
+    // Load injected.js directly into window context (testing exact production code)
     const code = fs.readFileSync(path.resolve(__dirname, '../injected.js'), 'utf8');
+    eval(code);
 
-    // Extract helper function
-    parseTime = new Function('timeStr', `
-      if (typeof timeStr === 'number') return timeStr / 1000;
-      if (!timeStr) return 0;
-      if (timeStr.endsWith('ms')) return parseFloat(timeStr) / 1000;
-      if (timeStr.endsWith('s')) return parseFloat(timeStr);
-      if (timeStr.endsWith('t')) return parseFloat(timeStr) / 10000000;
-      const parts = timeStr.split(':');
-      if (parts.length === 3) {
-        return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2].replace(',', '.'));
-      } else if (parts.length === 2) {
-        return parseFloat(parts[0]) * 60 + parseFloat(parts[1].replace(',', '.'));
-      }
-      return parseFloat(timeStr) || 0;
-    `);
+    const utils = window.__netflixDualSubsInjectedUtils;
+    parseTime = utils.parseTime;
+    parseTTML = utils.parseTTML;
+    parseJSONTimedText = utils.parseJSONTimedText;
+    parseVTT = utils.parseVTT;
+    isSubtitleUrl = utils.isSubtitleUrl;
+  });
 
-    parseTTML = new Function('xmlText', `
-      const timeFn = ${parseTime.toString()};
-      const cues = [];
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(xmlText, 'text/xml');
-      const paragraphs = doc.querySelectorAll('p');
-      paragraphs.forEach((p) => {
-        const beginAttr = p.getAttribute('begin');
-        const endAttr = p.getAttribute('end');
-        const durAttr = p.getAttribute('dur');
-        let start = timeFn(beginAttr);
-        let end = 0;
-        if (endAttr) {
-          end = timeFn(endAttr);
-        } else if (durAttr) {
-          end = start + timeFn(durAttr);
-        }
-        let textHtml = p.innerHTML.replace(/<br\\s*\\/?>/gi, '\\n').replace(/<[^>]+>/g, '').trim();
-        if (start < end && textHtml) cues.push({ start, end, text: textHtml });
-      });
-      return cues;
-    `);
-
-    parseVTT = new Function('vttText', `
-      const timeFn = ${parseTime.toString()};
-      const cues = [];
-      const lines = vttText.split(/\\r?\\n/);
-      let i = 0;
-      while (i < lines.length) {
-        const line = lines[i].trim();
-        if (line.includes('-->')) {
-          const parts = line.split('-->');
-          const start = timeFn(parts[0].trim());
-          const end = timeFn(parts[1].trim().split(' ')[0]);
-          i++;
-          let cueText = [];
-          while (i < lines.length && lines[i].trim() !== '') {
-            cueText.push(lines[i].trim());
-            i++;
-          }
-          const text = cueText.join('\\n').replace(/<[^>]+>/g, '');
-          if (start < end && text) cues.push({ start, end, text });
-        }
-        i++;
-      }
-      return cues;
-    `);
-
-    parseJSONTimedText = new Function('jsonObj', `
-      const cues = [];
-      try {
-        const events = jsonObj.events || (jsonObj.result && jsonObj.result.timedtext) || [];
-        events.forEach((evt) => {
-          const start = (evt.start || evt.startTime || 0) / 1000;
-          const duration = (evt.duration || evt.dur || 0) / 1000;
-          const end = evt.end ? evt.end / 1000 : (start + duration);
-
-          let linesText = '';
-          if (evt.lines) {
-            linesText = evt.lines.map(l => typeof l === 'string' ? l : (l.text || '')).join('\\n');
-          } else if (evt.text) {
-            linesText = typeof evt.text === 'string' ? evt.text : (evt.text.map(t => t.value || t).join(' '));
-          }
-
-          linesText = linesText.replace(/<[^>]+>/g, '').trim();
-          if (start < end && linesText) {
-            cues.push({ start, end, text: linesText });
-          }
-        });
-      } catch (e) {}
-      return cues;
-    `);
+  describe('Subtitle URL Matcher (isSubtitleUrl)', () => {
+    it('should correctly match Netflix subtitle URLs', () => {
+      expect(isSubtitleUrl('https://www.netflix.com/net/timedtext/12345')).toBe(true);
+      expect(isSubtitleUrl('https://example.com/subtitles.vtt')).toBe(true);
+      expect(isSubtitleUrl('https://example.com/subtitles.ttml')).toBe(true);
+      expect(isSubtitleUrl('https://example.com/video.mp4')).toBe(false);
+    });
   });
 
   describe('Timestamp Parsing (parseTime)', () => {
@@ -121,7 +50,7 @@ describe('Subtitle Payload & Timestamp Parsers', () => {
   });
 
   describe('TTML XML Parser', () => {
-    it('should parse TTML XML subtitles correctly', () => {
+    it('should parse TTML XML subtitles directly from injected.js', () => {
       const xml = `
         <tt>
           <body>
@@ -140,7 +69,7 @@ describe('Subtitle Payload & Timestamp Parsers', () => {
   });
 
   describe('WebVTT Parser', () => {
-    it('should parse WebVTT subtitles correctly', () => {
+    it('should parse WebVTT subtitles directly from injected.js', () => {
       const vtt = `WEBVTT
 
 00:00:02.000 --> 00:00:05.500
@@ -156,7 +85,7 @@ Subtitle Line 2
   });
 
   describe('Netflix JSON TimedText Parser', () => {
-    it('should parse Netflix event-based JSON timedtext correctly', () => {
+    it('should parse Netflix event-based JSON timedtext directly from injected.js', () => {
       const jsonObj = {
         events: [
           {

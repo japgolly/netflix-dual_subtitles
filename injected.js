@@ -19,7 +19,7 @@
     return typeof url === 'string' && SUBTITLE_URL_PATTERNS.some(pattern => pattern.test(url));
   }
 
-  // Parse time helper (HH:MM:SS.mmm or seconds or ticks)
+  // Parse time helper (HH:MM:SS.mmm or MM:SS.mmm or seconds or ticks)
   function parseTime(timeStr) {
     if (typeof timeStr === 'number') return timeStr / 1000;
     if (!timeStr) return 0;
@@ -332,5 +332,14 @@
       }
     }
   });
+
+  // Export utilities for testing
+  window.__netflixDualSubsInjectedUtils = {
+    parseTime: parseTime,
+    parseTTML: parseTTML,
+    parseJSONTimedText: parseJSONTimedText,
+    parseVTT: parseVTT,
+    isSubtitleUrl: isSubtitleUrl
+  };
 
 })();
