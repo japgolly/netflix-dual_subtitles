@@ -19,6 +19,14 @@ A Manifest V3 Chrome Extension that allows you to render two subtitle tracks sim
 4. Select this project directory
 5. Open [Netflix](https://www.netflix.com) and start playing any video!
 
+## Automated Unit Testing
+
+Run the automated Vitest test suite locally:
+
+```bash
+npm test
+```
+
 ## Files Overview
 
 - [`manifest.json`](./manifest.json): Extension configuration (Manifest V3).
@@ -28,3 +36,4 @@ A Manifest V3 Chrome Extension that allows you to render two subtitle tracks sim
 - [`content.js`](./content.js): Content script managing DOM overlay insertion, time loop sync, and control drawer UI.
 - [`styles.css`](./styles.css): Sleek Netflix dark mode CSS design system.
 - [`popup.html`](./popup.html) & [`popup.js`](./popup.js): Toolbar action popup window.
+- [`tests/`](./tests): Automated Vitest unit test suites for subtitle parsers, furigana engine, and language formatters.
