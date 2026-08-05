@@ -6,35 +6,52 @@
   const JAPANESE_CHAR_REGEX = /[\u3040-\u30ff\u4e00-\u9faf]/;
 
   let kuromojiTokenizer = null;
-  let isInitializing = false;
+  let initPromise = null;
+
+  const DEBUG = false;
+  const log = (...args) => DEBUG && console.log('[Netflix Dual Subtitles]', ...args);
+  const logError = (...args) => console.error('[Netflix Dual Subtitles]', ...args);
+
+  function getKuromojiLib() {
+    if (typeof kuromoji !== 'undefined') return kuromoji;
+    if (typeof window !== 'undefined' && window.kuromoji) return window.kuromoji;
+    if (typeof global !== 'undefined' && global.kuromoji) return global.kuromoji;
+    return null;
+  }
 
   function initKuromoji() {
-    if (kuromojiTokenizer || isInitializing) return;
-    isInitializing = true;
+    if (kuromojiTokenizer) return Promise.resolve(kuromojiTokenizer);
+    if (initPromise) return initPromise;
 
-    if (typeof kuromoji === 'undefined') {
-      console.error('[Netflix Dual Subtitles] Kuromoji library not loaded');
-      isInitializing = false;
-      return;
+    const kuromojiLib = getKuromojiLib();
+
+    if (!kuromojiLib) {
+      logError('Kuromoji library not loaded');
+      return Promise.resolve(null);
     }
 
-    try {
-      const dictPath = chrome.runtime.getURL('dict/');
-      console.log('[Netflix Dual Subtitles] Initializing Kuromoji.js with dictPath:', dictPath);
+    initPromise = new Promise((resolve) => {
+      try {
+        const dictPath = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL ? chrome.runtime.getURL('dict/') : './dict/';
+        log('Initializing Kuromoji.js with dictPath:', dictPath);
 
-      kuromoji.builder({ dicPath: dictPath }).build((err, tokenizer) => {
-        if (err) {
-          console.error('[Netflix Dual Subtitles] Error building Kuromoji tokenizer:', err);
-          isInitializing = false;
-          return;
-        }
-        kuromojiTokenizer = tokenizer;
-        console.log('[Netflix Dual Subtitles] Kuromoji.js Tokenizer built successfully!');
-      });
-    } catch (e) {
-      console.error('[Netflix Dual Subtitles] Exception initializing Kuromoji:', e);
-      isInitializing = false;
-    }
+        kuromojiLib.builder({ dicPath: dictPath }).build((err, tokenizer) => {
+          if (err) {
+            logError('Error building Kuromoji tokenizer:', err);
+            resolve(null);
+            return;
+          }
+          kuromojiTokenizer = tokenizer;
+          log('Kuromoji.js Tokenizer built successfully!');
+          resolve(kuromojiTokenizer);
+        });
+      } catch (e) {
+        logError('Exception initializing Kuromoji:', e);
+        resolve(null);
+      }
+    });
+
+    return initPromise;
   }
 
   // Convert Katakana to Hiragana
@@ -80,7 +97,7 @@
     let restSurface = surface.slice(prefixLen);
     let restReading = reading.slice(prefixLen);
 
-    // 2. Trim common suffix (Okurigana e.g. こえ in 聞こえ, べます in 食べます)
+    // 2. Trim common suffix (Okurigana e.g. こえる in 聞こえる, べます in 食べます)
     let suffixLen = 0;
     while (
       suffixLen < restSurface.length &&
@@ -115,17 +132,14 @@
     try {
       const tokens = kuromojiTokenizer.tokenize(text);
       let resultHtml = '';
-
       for (const token of tokens) {
         const surface = token.surface_form;
         const reading = token.reading ? kataToHira(token.reading) : null;
-
         resultHtml += alignFurigana(surface, reading);
       }
-
       return resultHtml;
     } catch (e) {
-      console.error('[Netflix Dual Subtitles] Kuromoji Furigana conversion error:', e);
+      logError('Kuromoji Furigana conversion error:', e);
       return escapeHtml(text);
     }
   }
@@ -136,6 +150,8 @@
   // Export module
   window.NetflixDualSubsFurigana = {
     toFurigana: toFurigana,
+    alignFurigana: alignFurigana,
+    initKuromoji: initKuromoji,
     isJapanese: (str) => typeof str === 'string' && JAPANESE_CHAR_REGEX.test(str),
     isReady: () => kuromojiTokenizer !== null
   };

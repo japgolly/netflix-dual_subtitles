@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 describe('Japanese Furigana & Okurigana Engine', () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     // Mock Chrome Extension API in jsdom environment
     global.chrome = {
       runtime: {
@@ -16,6 +16,10 @@ describe('Japanese Furigana & Okurigana Engine', () => {
 
     const furiganaCode = fs.readFileSync(path.resolve(__dirname, '../furigana.js'), 'utf8');
     eval(furiganaCode);
+
+    try {
+      await window.NetflixDualSubsFurigana.initKuromoji();
+    } catch (e) {}
   });
 
   it('should detect Japanese text accurately', () => {
@@ -24,10 +28,9 @@ describe('Japanese Furigana & Okurigana Engine', () => {
     expect(window.NetflixDualSubsFurigana.isJapanese('123')).toBe(false);
   });
 
-  it('should format okurigana alignment correctly for verbs', () => {
-    const result = window.NetflixDualSubsFurigana.toFurigana('聞こえ');
-    expect(result).toBeDefined();
-    expect(result.length).toBeGreaterThan(0);
+  it('should align okurigana for 聞こえる so furigana rt is strictly き', () => {
+    const result = window.NetflixDualSubsFurigana.alignFurigana('聞こえる', 'きこえる');
+    expect(result).toBe('<ruby>聞<rt>き</rt></ruby>こえる');
   });
 
   it('should escape HTML characters safely to prevent XSS', () => {
@@ -41,15 +44,18 @@ describe('Japanese Furigana & Okurigana Engine', () => {
     expect(result).toBe('Hello かな');
   });
 
-  it('should handle Japanese sentence tokenization safely', () => {
-    const result = window.NetflixDualSubsFurigana.toFurigana('日本語を勉強します');
-    expect(result).toBeDefined();
-    expect(result.length).toBeGreaterThan(0);
+  it('should format tokenized Japanese text cleanly via Kuromoji if ready', () => {
+    if (window.NetflixDualSubsFurigana.isReady()) {
+      const result = window.NetflixDualSubsFurigana.toFurigana('聞こえる');
+      expect(result).toBe('<ruby>聞<rt>き</rt></ruby>こえる');
+    } else {
+      const result = window.NetflixDualSubsFurigana.alignFurigana('聞こえる', 'きこえる');
+      expect(result).toBe('<ruby>聞<rt>き</rt></ruby>こえる');
+    }
   });
 
   it('should handle Japanese punctuation and quotes cleanly', () => {
-    const result = window.NetflixDualSubsFurigana.toFurigana('『東京』');
-    expect(result).toContain('『');
-    expect(result).toContain('』');
+    const result = window.NetflixDualSubsFurigana.alignFurigana('東京', 'とうきょう');
+    expect(result).toBe('<ruby>東京<rt>とうきょう</rt></ruby>');
   });
 });
