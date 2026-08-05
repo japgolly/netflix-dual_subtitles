@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  // Kanji & Japanese Regex Ranges
+  // Kanji and Japanese Character Regex Ranges
   const KANJI_REGEX = /[\u4e00-\u9faf\u3400-\u4dbf]/;
   const JAPANESE_CHAR_REGEX = /[\u3040-\u30ff\u4e00-\u9faf]/;
 
@@ -9,9 +9,12 @@
   let initPromise = null;
 
   const DEBUG = false;
+  // Log output to console if DEBUG is enabled
   const log = (...args) => DEBUG && console.log('[Netflix Dual Subtitles]', ...args);
+  // Log error output to console
   const logError = (...args) => console.error('[Netflix Dual Subtitles]', ...args);
 
+  // Safe lookup for Kuromoji library in global environment
   function getKuromojiLib() {
     if (typeof kuromoji !== 'undefined') return kuromoji;
     if (typeof window !== 'undefined' && window.kuromoji) return window.kuromoji;
@@ -19,6 +22,7 @@
     return null;
   }
 
+  // Initialize Kuromoji.js morphological analyzer
   function initKuromoji() {
     if (kuromojiTokenizer) return Promise.resolve(kuromojiTokenizer);
     if (initPromise) return initPromise;
@@ -54,7 +58,7 @@
     return initPromise;
   }
 
-  // Convert Katakana to Hiragana
+  // Convert Katakana characters to Hiragana
   function kataToHira(str) {
     if (!str) return '';
     return str.replace(/[\u30a1-\u30f6]/g, (match) => {
@@ -62,6 +66,7 @@
     });
   }
 
+  // Escape HTML special characters for safe DOM insertion
   function escapeHtml(str) {
     if (typeof str !== 'string') return '';
     return str
@@ -72,7 +77,7 @@
       .replace(/'/g, '&#039;');
   }
 
-  // Smart Okurigana & Kana Alignment
+  // Trim Okurigana and align Kanji stems with Kana reading annotations
   function alignFurigana(surface, reading) {
     if (!KANJI_REGEX.test(surface)) {
       return escapeHtml(surface);
@@ -119,6 +124,7 @@
     return `${escapeHtml(prefix)}${escapeHtml(kanjiStem)}${escapeHtml(suffix)}`;
   }
 
+  // Parse text and return HTML with ruby furigana annotations
   function toFurigana(text) {
     if (!text || typeof text !== 'string' || !JAPANESE_CHAR_REGEX.test(text)) {
       return escapeHtml(text || '');
@@ -144,10 +150,8 @@
     }
   }
 
-  // Initialize Kuromoji on load
   initKuromoji();
 
-  // Export module
   window.NetflixDualSubsFurigana = {
     toFurigana: toFurigana,
     alignFurigana: alignFurigana,
